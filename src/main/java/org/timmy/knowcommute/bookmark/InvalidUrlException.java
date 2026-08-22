@@ -1,0 +1,8 @@
+package org.timmy.knowcommute.bookmark;
+
+public class InvalidUrlException extends RuntimeException {
+
+    public InvalidUrlException(String message) {
+        super(message);
+    }
+}
