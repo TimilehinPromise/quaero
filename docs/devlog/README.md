@@ -60,3 +60,5 @@ Never edit an accepted entry's decision. Write a new entry, and change the old o
 | [0001](0001-2026-08-22-foundations-and-stack-decisions.md) | 2026-08-22 | Foundations and stack decisions | accepted |
 | [0002](0002-2026-08-22-schema-constraints.md) | 2026-08-22 | Schema constraints that shaped the first migrations | accepted |
 | [0003](0003-2026-08-22-ssrf-control.md) | 2026-08-22 | SSRF control and its known gap | accepted |
+| [0004](0004-2026-08-22-tts-provider-deferred.md) | 2026-08-22 | TTS provider deferred; hosting is Contabo | accepted |
+| [0005](0005-2026-08-22-queue-and-attempt-semantics.md) | 2026-08-22 | Queue claim and attempt semantics | accepted |

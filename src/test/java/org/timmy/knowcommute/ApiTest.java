@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Import;
 
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
-@SpringBootTest
+@SpringBootTest(properties = "readcast.pipeline.enabled=false")
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 public @interface ApiTest {

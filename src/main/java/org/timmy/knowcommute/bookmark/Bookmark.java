@@ -119,14 +119,22 @@ public class Bookmark extends Auditable {
         advanceTo(BookmarkStatus.READY);
     }
 
-    public void scheduleRetry(String error, Instant nextAttemptAt) {
+    /**
+     * Counts the attempt before the work runs, so a step that kills the worker still burns an
+     * attempt and cannot loop forever. {@code leaseUntil} hides the row from other workers;
+     * if this one dies, the lease lapses and the row is picked up again.
+     */
+    public void claim(Instant leaseUntil) {
         this.attempts++;
+        this.nextAttemptAt = leaseUntil;
+    }
+
+    public void scheduleRetry(String error, Instant nextAttemptAt) {
         this.lastError = error;
         this.nextAttemptAt = nextAttemptAt;
     }
 
     public void fail(String error) {
-        this.attempts++;
         this.lastError = error;
         this.nextAttemptAt = null;
         this.status = BookmarkStatus.FAILED;
@@ -140,8 +148,10 @@ public class Bookmark extends Auditable {
         return deletedAt != null;
     }
 
+    /** Attempts are per-step, so clearing them here keeps a long pipeline from exhausting them. */
     private void advanceTo(BookmarkStatus next) {
         this.status = next;
+        this.attempts = 0;
         this.lastError = null;
         this.nextAttemptAt = null;
     }

@@ -118,6 +118,7 @@ class BookmarkRepositoryTest {
         Bookmark bookmark = bookmarks.saveAndFlush(
                 Bookmark.pending(owner, ARTICLE_URL, SummaryLength.MEDIUM));
 
+        bookmark.claim(Instant.now().plusSeconds(300));
         bookmark.scheduleRetry("fetch timed out", Instant.now().plusSeconds(30));
         bookmarks.saveAndFlush(bookmark);
 
@@ -130,6 +131,7 @@ class BookmarkRepositoryTest {
     void failingClearsRetrySchedule() {
         Bookmark bookmark = bookmarks.saveAndFlush(
                 Bookmark.pending(owner, ARTICLE_URL, SummaryLength.MEDIUM));
+        bookmark.claim(Instant.now().plusSeconds(300));
         bookmark.scheduleRetry("first failure", Instant.now().plusSeconds(30));
 
         bookmark.fail("gave up after 3 attempts");
@@ -137,18 +139,20 @@ class BookmarkRepositoryTest {
 
         assertThat(bookmark.getStatus()).isEqualTo(BookmarkStatus.FAILED);
         assertThat(bookmark.getNextAttemptAt()).isNull();
-        assertThat(bookmark.getAttempts()).isEqualTo(2);
+        assertThat(bookmark.getAttempts()).isEqualTo(1);
     }
 
     @Test
     void advancingClearsPreviousFailure() {
         Bookmark bookmark = bookmarks.saveAndFlush(
                 Bookmark.pending(owner, ARTICLE_URL, SummaryLength.MEDIUM));
+        bookmark.claim(Instant.now().plusSeconds(300));
         bookmark.scheduleRetry("transient failure", Instant.now().plusSeconds(30));
 
         bookmark.applyExtraction("An Article", "example.com", "body text", 420, "hash");
 
         assertThat(bookmark.getLastError()).isNull();
         assertThat(bookmark.getNextAttemptAt()).isNull();
+        assertThat(bookmark.getAttempts()).isZero();
     }
 }

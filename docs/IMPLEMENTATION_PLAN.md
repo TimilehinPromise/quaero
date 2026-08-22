@@ -286,8 +286,10 @@ integration test, `@Disabled` by default, for real-provider smoke checks.
 
 `pom.xml`: add `software.amazon.awssdk:s3:2.54.2`.
 
-- `tts/ElevenLabsTextToSpeechModel implements TextToSpeechModel` — WebClient against
-  ElevenLabs Turbo v2.5, streaming the MP3 body to avoid holding it fully in heap.
+- One `TextToSpeechModel` implementation over WebClient, streaming the MP3 body rather than
+  holding it in heap. **Provider undecided** — the PRD names ElevenLabs, but it is being
+  re-evaluated on cost (see devlog 0004). Code targets the Spring AI interface, so the
+  choice is a class swap, not a rewrite.
 - `storage/AudioStorage` + `R2AudioStorage` — S3 client with R2's endpoint override.
 - `GET /api/v1/audio/{bookmarkId}` — `302` to a short-lived presigned URL. Keeps audio
   bandwidth off the VPS entirely, which is the whole point of D4.
@@ -301,6 +303,8 @@ Testcontainer (MinIO/LocalStack) — no live R2 in CI.
 ---
 
 ## Stage 7 — Deployment
+
+Target host is a **Contabo VPS**, not the Hetzner box named in PRD §8.
 
 `Dockerfile` (layered jar, JRE 21), `docker-compose.yml` (app + Postgres 17), Nginx config
 for SSL termination and proxying, GitHub Actions running `./mvnw verify`. Secrets via env
