@@ -1,0 +1,146 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-create-bookmarks
+      author: timmy
+      changes:
+        - createTable:
+            tableName: bookmarks
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_bookmarks
+              - column:
+                  name: user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_bookmarks_user
+                    references: users(id)
+                    deleteCascade: true
+              - column:
+                  name: url
+                  type: TEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: title
+                  type: VARCHAR(512)
+              - column:
+                  name: source_domain
+                  type: VARCHAR(255)
+              - column:
+                  name: extracted_text
+                  type: TEXT
+              - column:
+                  name: summary_text
+                  type: TEXT
+              - column:
+                  name: content_hash
+                  type: VARCHAR(64)
+              - column:
+                  name: word_count
+                  type: INTEGER
+              - column:
+                  name: audio_storage_key
+                  type: VARCHAR(512)
+              - column:
+                  name: audio_duration_sec
+                  type: INTEGER
+              - column:
+                  name: status
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: summary_length
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: attempts
+                  type: INTEGER
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_error
+                  type: TEXT
+              - column:
+                  name: next_attempt_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: processed_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: deleted_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 002-bookmarks-status-check
+      author: timmy
+      changes:
+        - sql:
+            sql: >-
+              ALTER TABLE bookmarks ADD CONSTRAINT ck_bookmarks_status
+              CHECK (status IN ('PENDING','SUMMARIZING','GENERATING_AUDIO','READY','FAILED'))
+        - sql:
+            sql: >-
+              ALTER TABLE bookmarks ADD CONSTRAINT ck_bookmarks_summary_length
+              CHECK (summary_length IN ('SHORT','MEDIUM','LONG'))
+      rollback:
+        - sql:
+            sql: ALTER TABLE bookmarks DROP CONSTRAINT ck_bookmarks_status
+        - sql:
+            sql: ALTER TABLE bookmarks DROP CONSTRAINT ck_bookmarks_summary_length
+
+  - changeSet:
+      id: 002-bookmarks-indexes
+      author: timmy
+      changes:
+        - createIndex:
+            tableName: bookmarks
+            indexName: ix_bookmarks_user_created
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: created_at
+                  descending: true
+        - createIndex:
+            tableName: bookmarks
+            indexName: ix_bookmarks_queue
+            columns:
+              - column:
+                  name: status
+              - column:
+                  name: next_attempt_at
+        - sql:
+            comment: >-
+              Expression index on md5(url) rather than url itself: a btree entry over a raw
+              TEXT url can exceed the 2704-byte page limit and fail the insert. Partial on
+              deleted_at so a soft-deleted article can be saved again.
+            sql: >-
+              CREATE UNIQUE INDEX ux_bookmarks_user_url ON bookmarks (user_id, md5(url))
+              WHERE deleted_at IS NULL
+      rollback:
+        - dropIndex:
+            tableName: bookmarks
+            indexName: ix_bookmarks_user_created
+        - dropIndex:
+            tableName: bookmarks
+            indexName: ix_bookmarks_queue
+        - sql:
+            sql: DROP INDEX ux_bookmarks_user_url

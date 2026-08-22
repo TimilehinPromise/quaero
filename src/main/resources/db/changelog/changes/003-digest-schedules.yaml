@@ -1,0 +1,66 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-digest-schedules
+      author: timmy
+      changes:
+        - createTable:
+            tableName: digest_schedules
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_digest_schedules
+              - column:
+                  name: user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_digest_schedules_user
+                    references: users(id)
+                    deleteCascade: true
+              - column:
+                  name: cron_expression
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: timezone
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: is_active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: next_run_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: last_run_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: digest_schedules
+            columnNames: user_id
+            constraintName: ux_digest_schedules_user
+        - createIndex:
+            tableName: digest_schedules
+            indexName: ix_digest_schedules_due
+            columns:
+              - column:
+                  name: is_active
+              - column:
+                  name: next_run_at

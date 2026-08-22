@@ -58,3 +58,4 @@ Never edit an accepted entry's decision. Write a new entry, and change the old o
 | # | Date | Title | Status |
 |---|------|-------|--------|
 | [0001](0001-2026-08-22-foundations-and-stack-decisions.md) | 2026-08-22 | Foundations and stack decisions | accepted |
+| [0002](0002-2026-08-22-schema-constraints.md) | 2026-08-22 | Schema constraints that shaped the first migrations | accepted |
