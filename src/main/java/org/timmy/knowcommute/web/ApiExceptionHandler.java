@@ -1,6 +1,7 @@
 package org.timmy.knowcommute.web;
 
 import java.net.URI;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -14,7 +15,11 @@ import org.timmy.knowcommute.security.UnauthenticatedException;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
-    private static final String PROBLEM_BASE = "https://readcast.app/problems/";
+    private final String problemTypeBase;
+
+    public ApiExceptionHandler(@Value("${readcast.problem-type-base}") String problemTypeBase) {
+        this.problemTypeBase = problemTypeBase;
+    }
 
     @ExceptionHandler(UnauthenticatedException.class)
     public ProblemDetail onUnauthenticated(UnauthenticatedException e) {
@@ -47,7 +52,7 @@ public class ApiExceptionHandler {
 
     private ProblemDetail problem(HttpStatus status, String slug, String title, String detail) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
-        problem.setType(URI.create(PROBLEM_BASE + slug));
+        problem.setType(URI.create(problemTypeBase + slug));
         problem.setTitle(title);
         return problem;
     }

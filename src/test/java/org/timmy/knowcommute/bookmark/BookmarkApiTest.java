@@ -102,7 +102,8 @@ class BookmarkApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("http://169.254.169.254/latest/meta-data/")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.title").value("Invalid URL"));
+                .andExpect(jsonPath("$.title").value("Invalid URL"))
+                .andExpect(jsonPath("$.type").value("urn:readcast:problem:invalid-url"));
     }
 
     @Test
