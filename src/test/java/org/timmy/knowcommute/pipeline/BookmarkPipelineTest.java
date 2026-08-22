@@ -17,6 +17,7 @@ import org.timmy.knowcommute.bookmark.Bookmark;
 import org.timmy.knowcommute.bookmark.BookmarkRepository;
 import org.timmy.knowcommute.bookmark.BookmarkStatus;
 import org.timmy.knowcommute.bookmark.SummaryLength;
+import org.timmy.knowcommute.extraction.SiteBlockedException;
 import org.timmy.knowcommute.user.DeviceUser;
 import org.timmy.knowcommute.user.DeviceUserRepository;
 
@@ -186,6 +187,41 @@ class BookmarkPipelineTest {
         Instant later = now.plus(Duration.ofSeconds(2));
         claimer.claim(10, later, later.plus(Duration.ofSeconds(1)));
         assertThat(reload(id).getAttempts()).isEqualTo(2);
+    }
+
+    @Test
+    void aBlockedSiteGoesStraightToBlockedWithoutBurningRetries() {
+        UUID id = givenPendingBookmark();
+        BookmarkPipeline pipeline = pipelineWith(new RecordingStep(BookmarkStatus.PENDING, b -> {
+            throw new SiteBlockedException("Site refused the request (HTTP 403)");
+        }));
+
+        pipeline.process(claimOne());
+
+        Bookmark blocked = reload(id);
+        assertThat(blocked.getStatus()).isEqualTo(BookmarkStatus.BLOCKED);
+        assertThat(blocked.getStatus().isTerminal()).isTrue();
+        assertThat(blocked.getAttempts()).isEqualTo(1);
+        assertThat(blocked.getNextAttemptAt()).isNull();
+        assertThat(claimer.claim(10, Instant.now(), Instant.now().plus(Duration.ofMinutes(5))))
+                .isEmpty();
+    }
+
+    @Test
+    void pastedContentPutsABlockedBookmarkBackIntoThePipeline() {
+        UUID id = givenPendingBookmark();
+        Bookmark bookmark = reload(id);
+        bookmark.block("Site refused the request (HTTP 403)");
+        bookmarks.saveAndFlush(bookmark);
+
+        bookmark.applyPastedContent("Pasted Title", "some pasted body text", 4, "hash");
+        bookmarks.saveAndFlush(bookmark);
+
+        Bookmark recovered = reload(id);
+        assertThat(recovered.getStatus()).isEqualTo(BookmarkStatus.SUMMARIZING);
+        assertThat(recovered.getLastError()).isNull();
+        assertThat(claimer.claim(10, Instant.now(), Instant.now().plus(Duration.ofMinutes(5))))
+                .containsExactly(id);
     }
 
     @Test

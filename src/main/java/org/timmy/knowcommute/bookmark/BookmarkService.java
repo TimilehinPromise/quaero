@@ -1,6 +1,10 @@
 package org.timmy.knowcommute.bookmark;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -40,6 +44,31 @@ public class BookmarkService {
     @Transactional(readOnly = true)
     public BookmarkDetail get(DeviceUser user, UUID id) {
         return BookmarkDetail.from(require(user, id));
+    }
+
+    /** Recovery path for sites that refuse a server-side fetch; see PRD 13. */
+    @Transactional
+    public BookmarkDetail pasteContent(DeviceUser user, UUID id, PasteContentRequest request) {
+        Bookmark bookmark = require(user, id);
+        if (bookmark.getStatus() != BookmarkStatus.BLOCKED
+                && bookmark.getStatus() != BookmarkStatus.FAILED) {
+            throw new BookmarkNotRecoverableException(bookmark.getStatus());
+        }
+
+        String text = request.text().replaceAll("\\s+", " ").trim();
+        String title = request.title() == null || request.title().isBlank()
+                ? bookmark.getTitle() : request.title().trim();
+        bookmark.applyPastedContent(title, text, text.split("\\s+").length, sha256(text));
+        return BookmarkDetail.from(bookmark);
+    }
+
+    private String sha256(String text) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(text.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is required by the JDK", e);
+        }
     }
 
     @Transactional

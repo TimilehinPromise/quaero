@@ -1,0 +1,22 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-add-blocked-status
+      author: timmy
+      changes:
+        - sql:
+            comment: >-
+              BLOCKED is terminal but distinct from FAILED: the site refused a server-side
+              fetch (bot challenge, auth wall), which no retry will fix, and the user can
+              recover it by pasting the text.
+            sql: ALTER TABLE bookmarks DROP CONSTRAINT ck_bookmarks_status
+        - sql:
+            sql: >-
+              ALTER TABLE bookmarks ADD CONSTRAINT ck_bookmarks_status
+              CHECK (status IN ('PENDING','SUMMARIZING','GENERATING_AUDIO','READY','FAILED','BLOCKED'))
+      rollback:
+        - sql:
+            sql: ALTER TABLE bookmarks DROP CONSTRAINT ck_bookmarks_status
+        - sql:
+            sql: >-
+              ALTER TABLE bookmarks ADD CONSTRAINT ck_bookmarks_status
+              CHECK (status IN ('PENDING','SUMMARIZING','GENERATING_AUDIO','READY','FAILED'))

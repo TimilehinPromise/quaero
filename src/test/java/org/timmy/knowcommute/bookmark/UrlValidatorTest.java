@@ -14,7 +14,8 @@ class UrlValidatorTest {
     private static final String PUBLIC_IP = "93.184.216.34";
 
     private final StubHostResolver resolver = new StubHostResolver();
-    private final UrlValidator validator = new UrlValidator(resolver);
+    private final UrlValidator validator =
+            new UrlValidator(resolver, new org.timmy.knowcommute.security.PrivateAddressPolicy());
 
     @ParameterizedTest
     @ValueSource(strings = {

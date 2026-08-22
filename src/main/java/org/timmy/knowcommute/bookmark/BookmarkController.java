@@ -49,6 +49,12 @@ public class BookmarkController {
         return bookmarkService.get(user, id);
     }
 
+    @PostMapping("/{id}/content")
+    public BookmarkDetail pasteContent(@CurrentUser DeviceUser user, @PathVariable UUID id,
+                                       @Valid @RequestBody PasteContentRequest request) {
+        return bookmarkService.pasteContent(user, id, request);
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@CurrentUser DeviceUser user, @PathVariable UUID id) {

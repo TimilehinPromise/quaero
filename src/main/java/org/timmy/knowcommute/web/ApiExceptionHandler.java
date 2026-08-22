@@ -8,6 +8,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.timmy.knowcommute.bookmark.BookmarkNotFoundException;
+import org.timmy.knowcommute.bookmark.BookmarkNotRecoverableException;
 import org.timmy.knowcommute.bookmark.DuplicateBookmarkException;
 import org.timmy.knowcommute.bookmark.InvalidUrlException;
 import org.timmy.knowcommute.security.UnauthenticatedException;
@@ -34,6 +35,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(DuplicateBookmarkException.class)
     public ProblemDetail onDuplicate(DuplicateBookmarkException e) {
         return problem(HttpStatus.CONFLICT, "duplicate-bookmark", "Already saved", e.getMessage());
+    }
+
+    @ExceptionHandler(BookmarkNotRecoverableException.class)
+    public ProblemDetail onNotRecoverable(BookmarkNotRecoverableException e) {
+        return problem(HttpStatus.CONFLICT, "not-recoverable", "Cannot paste content", e.getMessage());
     }
 
     @ExceptionHandler(InvalidUrlException.class)

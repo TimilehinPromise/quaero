@@ -11,6 +11,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.timmy.knowcommute.bookmark.Bookmark;
 import org.timmy.knowcommute.bookmark.BookmarkRepository;
 import org.timmy.knowcommute.bookmark.BookmarkStatus;
+import org.timmy.knowcommute.extraction.SiteBlockedException;
 
 /**
  * Runs one bookmark through one step.
@@ -72,7 +73,9 @@ public class BookmarkPipeline {
     private void recordFailure(UUID bookmarkId, Exception cause) {
         transactions.executeWithoutResult(status -> bookmarks.findById(bookmarkId).ifPresent(bookmark -> {
             String message = describe(cause);
-            if (retryPolicy.isExhausted(bookmark.getAttempts())) {
+            if (cause instanceof SiteBlockedException) {
+                bookmark.block(message);
+            } else if (retryPolicy.isExhausted(bookmark.getAttempts())) {
                 bookmark.fail(message);
             } else {
                 bookmark.scheduleRetry(message,

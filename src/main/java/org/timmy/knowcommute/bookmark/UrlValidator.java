@@ -7,6 +7,7 @@ import java.util.Locale;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.timmy.knowcommute.security.PrivateAddressPolicy;
 
 /**
  * Rejects URLs the backend must not fetch. This is an SSRF control, not a formatting check:
@@ -24,6 +25,7 @@ public class UrlValidator {
     private static final int MAX_URL_LENGTH = 2048;
 
     private final HostResolver hostResolver;
+    private final PrivateAddressPolicy addressPolicy;
 
     public URI validate(String candidate) {
         if (candidate == null || candidate.isBlank()) {
@@ -88,31 +90,10 @@ public class UrlValidator {
         }
 
         for (InetAddress address : addresses) {
-            if (isPrivate(address)) {
+            if (addressPolicy.isPrivate(address)) {
                 throw new InvalidUrlException("URL resolves to a non-public address");
             }
         }
     }
 
-    private boolean isPrivate(InetAddress address) {
-        return address.isLoopbackAddress()
-                || address.isAnyLocalAddress()
-                || address.isLinkLocalAddress()
-                || address.isSiteLocalAddress()
-                || address.isMulticastAddress()
-                || isUniqueLocalIpv6(address)
-                || isCarrierGradeNat(address);
-    }
-
-    private boolean isUniqueLocalIpv6(InetAddress address) {
-        byte[] bytes = address.getAddress();
-        return bytes.length == 16 && (bytes[0] & 0xFE) == 0xFC;
-    }
-
-    private boolean isCarrierGradeNat(InetAddress address) {
-        byte[] bytes = address.getAddress();
-        return bytes.length == 4
-                && (bytes[0] & 0xFF) == 100
-                && (bytes[1] & 0xC0) == 64;
-    }
 }

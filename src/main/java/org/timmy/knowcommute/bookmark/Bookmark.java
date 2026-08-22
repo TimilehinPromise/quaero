@@ -134,6 +134,23 @@ public class Bookmark extends Auditable {
         this.nextAttemptAt = nextAttemptAt;
     }
 
+    /** Terminal without burning retries: a refused fetch will be refused again. */
+    public void block(String reason) {
+        this.lastError = reason;
+        this.nextAttemptAt = null;
+        this.status = BookmarkStatus.BLOCKED;
+    }
+
+    /** Recovery from BLOCKED: the user supplied the text a fetch could not reach. */
+    public void applyPastedContent(String title, String text, int wordCount, String contentHash) {
+        this.title = title;
+        this.extractedText = text;
+        this.wordCount = wordCount;
+        this.contentHash = contentHash;
+        this.attempts = 0;
+        advanceTo(BookmarkStatus.SUMMARIZING);
+    }
+
     public void fail(String error) {
         this.lastError = error;
         this.nextAttemptAt = null;
