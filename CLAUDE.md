@@ -13,6 +13,7 @@ separate concern that consumes the API defined here.
 | `docs/ReadCast_PRD.md` | Product requirements. The *what*. Not a build order. |
 | `docs/IMPLEMENTATION_PLAN.md` | Staged build order, stage 0–8. The *how*. |
 | `docs/CODING_STANDARDS.md` | **Binding.** Reviewers reject on these. |
+| `docs/ARCHITECTURE_PIPELINE.md` | How the bookmark pipeline works. Read before touching `pipeline/`. |
 | `docs/devlog/` | Dated decision history. The *why*. |
 
 Where the PRD and `docs/IMPLEMENTATION_PLAN.md` disagree, the plan wins and the divergence is
