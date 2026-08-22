@@ -1,0 +1,7 @@
+databaseChangeLog:
+  # Drop new changesets into db/changelog/changes/ as *.yaml; they are
+  # applied in filename order, so prefix them (001-, 002-, ...).
+  - includeAll:
+      path: classpath:/db/changelog/changes/
+      endsWithFilter: .yaml
+      errorIfMissingOrEmpty: false
