@@ -16,4 +16,12 @@ public interface BookmarkRepository extends JpaRepository<Bookmark, UUID> {
             UUID userId, BookmarkStatus status, Pageable pageable);
 
     boolean existsByUserIdAndUrlAndDeletedAtIsNull(UUID userId, String url);
+
+    /**
+     * Finds an existing summary for identical article text at the same length. Article text is
+     * public content, so reusing across users is safe and is the main defence against paying
+     * twice for the same article.
+     */
+    Optional<Bookmark> findFirstByContentHashAndSummaryLengthAndSummaryTextIsNotNull(
+            String contentHash, SummaryLength summaryLength);
 }
