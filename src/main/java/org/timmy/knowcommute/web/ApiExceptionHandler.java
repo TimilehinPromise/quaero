@@ -7,6 +7,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.timmy.knowcommute.audio.AudioNotReadyException;
 import org.timmy.knowcommute.bookmark.BookmarkNotFoundException;
 import org.timmy.knowcommute.bookmark.BookmarkNotRecoverableException;
 import org.timmy.knowcommute.bookmark.DuplicateBookmarkException;
@@ -35,6 +36,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(DuplicateBookmarkException.class)
     public ProblemDetail onDuplicate(DuplicateBookmarkException e) {
         return problem(HttpStatus.CONFLICT, "duplicate-bookmark", "Already saved", e.getMessage());
+    }
+
+    @ExceptionHandler(AudioNotReadyException.class)
+    public ProblemDetail onAudioNotReady(AudioNotReadyException e) {
+        return problem(HttpStatus.CONFLICT, "audio-not-ready", "Audio not ready", e.getMessage());
     }
 
     @ExceptionHandler(BookmarkNotRecoverableException.class)
