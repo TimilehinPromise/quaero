@@ -31,3 +31,6 @@ target/
 
 ### Internal docs and decision log — local only
 docs/
+
+### macOS
+.DS_Store
