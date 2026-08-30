@@ -188,4 +188,44 @@ class BookmarkApiTest {
                         .content("{\"url\":\"\",\"summaryLength\":\"MEDIUM\"}"))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void retriesAFailedBookmarkFromTheStartOfThePipeline() throws Exception {
+        resolvesPublicly();
+
+        String response = mockMvc.perform(post("/api/v1/bookmarks")
+                        .header("X-Device-Id", DEVICE_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("https://example.com/failed")))
+                .andReturn().getResponse().getContentAsString();
+        UUID id = UUID.fromString(response.replaceAll(".*\"id\":\"([^\"]+)\".*", "$1"));
+        Bookmark failed = bookmarks.findById(id).orElseThrow();
+        failed.fail("gave up");
+        bookmarks.saveAndFlush(failed);
+
+        mockMvc.perform(post("/api/v1/bookmarks/{id}/retry", id).header("X-Device-Id", DEVICE_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.lastError").doesNotExist());
+
+        Bookmark requeued = bookmarks.findById(id).orElseThrow();
+        assertThat(requeued.getAttempts()).isZero();
+        assertThat(requeued.getNextAttemptAt()).isNull();
+    }
+
+    @Test
+    void refusesToRetryABookmarkThatIsStillMoving() throws Exception {
+        resolvesPublicly();
+
+        String response = mockMvc.perform(post("/api/v1/bookmarks")
+                        .header("X-Device-Id", DEVICE_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("https://example.com/active")))
+                .andReturn().getResponse().getContentAsString();
+        String id = response.replaceAll(".*\"id\":\"([^\"]+)\".*", "$1");
+
+        mockMvc.perform(post("/api/v1/bookmarks/{id}/retry", id).header("X-Device-Id", DEVICE_ID))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("urn:readcast:problem:not-recoverable"));
+    }
 }

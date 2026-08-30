@@ -78,12 +78,16 @@ class AudioGenerationStepTest {
         }
     };
 
-    private final AudioGenerationStep step = new AudioGenerationStep(speechModel, storage);
+    private final TtsProperties ttsProperties = new TtsProperties(
+            null, null, null, null, null, null, java.time.Duration.ofMinutes(1), 1, null, null);
+
+    private final AudioGenerationStep step =
+            new AudioGenerationStep(speechModel, storage, ttsProperties);
 
     private Bookmark summarised() {
         Bookmark bookmark = Bookmark.pending(
                 DeviceUser.withDeviceId("device"), "https://example.com/a", SummaryLength.MEDIUM);
-        bookmark.applyExtraction("A Title", "example.com", "body", 400, "hash");
+        bookmark.applyExtraction("A Title", null, "example.com", "body", 400, "hash");
         bookmark.applySummary("This is the narration script.");
         return bookmark;
     }

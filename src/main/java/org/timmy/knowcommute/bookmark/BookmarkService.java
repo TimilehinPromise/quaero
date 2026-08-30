@@ -71,6 +71,18 @@ public class BookmarkService {
         }
     }
 
+    /** Retry starts the whole pipeline over; a partial fix may live in any step. */
+    @Transactional
+    public BookmarkDetail retry(DeviceUser user, UUID id) {
+        Bookmark bookmark = require(user, id);
+        if (bookmark.getStatus() != BookmarkStatus.FAILED
+                && bookmark.getStatus() != BookmarkStatus.BLOCKED) {
+            throw new BookmarkNotRecoverableException(bookmark.getStatus());
+        }
+        bookmark.requeue();
+        return BookmarkDetail.from(bookmark);
+    }
+
     @Transactional
     public void delete(DeviceUser user, UUID id) {
         require(user, id).softDelete();

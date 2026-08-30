@@ -76,7 +76,7 @@ class BookmarkPipelineTest {
         UUID id = givenPendingBookmark();
         BookmarkPipeline pipeline = pipelineWith(
                 new RecordingStep(BookmarkStatus.PENDING,
-                        b -> b.applyExtraction("Title", "example.com", "text", 400, "hash")),
+                        b -> b.applyExtraction("Title", null, "example.com", "text", 400, "hash")),
                 new RecordingStep(BookmarkStatus.SUMMARIZING, b -> b.applySummary("summary")),
                 new RecordingStep(BookmarkStatus.GENERATING_AUDIO, b -> b.applyAudio("key.mp3", 120)));
 
@@ -97,7 +97,7 @@ class BookmarkPipelineTest {
     void advancingResetsAttemptsSoALongPipelineDoesNotExhaustThem() {
         UUID id = givenPendingBookmark();
         BookmarkPipeline pipeline = pipelineWith(new RecordingStep(BookmarkStatus.PENDING,
-                b -> b.applyExtraction("Title", "example.com", "text", 400, "hash")));
+                b -> b.applyExtraction("Title", null, "example.com", "text", 400, "hash")));
 
         pipeline.process(claimOne());
 
@@ -154,7 +154,7 @@ class BookmarkPipelineTest {
     void ignoresTerminalBookmarks() {
         UUID id = givenPendingBookmark();
         Bookmark bookmark = reload(id);
-        bookmark.applyExtraction("t", "example.com", "x", 1, "h");
+        bookmark.applyExtraction("t", null, "example.com", "x", 1, "h");
         bookmark.applySummary("s");
         bookmark.applyAudio("k", 1);
         bookmarks.saveAndFlush(bookmark);

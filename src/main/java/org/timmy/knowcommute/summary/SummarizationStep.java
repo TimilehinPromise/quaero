@@ -34,12 +34,26 @@ public class SummarizationStep implements PipelineStep {
     private String reuseOrGenerate(Bookmark bookmark, String article) {
         return bookmarks.findFirstByContentHashAndSummaryLengthAndSummaryTextIsNotNull(
                         bookmark.getContentHash(), bookmark.getSummaryLength())
-                .map(existing -> {
-                    log.info("Reusing summary from bookmark {} for identical content", existing.getId());
-                    return existing.getSummaryText();
-                })
+                .map(existing -> reuseWithinCeiling(existing, bookmark, article))
                 .orElseGet(() -> summarizationService.summarise(
                         bookmark.getTitle(), bookmark.getSourceDomain(), article,
                         bookmark.getSummaryLength()));
+    }
+
+    /**
+     * Cached summaries may predate the current prompt and the ceiling gate, so a cache hit
+     * gets the same check as a fresh summary; an over-long one is regenerated, not served.
+     */
+    private String reuseWithinCeiling(Bookmark existing, Bookmark bookmark, String article) {
+        String cached = existing.getSummaryText();
+        if (summarizationService.exceedsCeiling(cached, bookmark.getSummaryLength())) {
+            log.warn("Cached summary from bookmark {} is over the {} ceiling; regenerating",
+                    existing.getId(), bookmark.getSummaryLength());
+            return summarizationService.summarise(
+                    bookmark.getTitle(), bookmark.getSourceDomain(), article,
+                    bookmark.getSummaryLength());
+        }
+        log.info("Reusing summary from bookmark {} for identical content", existing.getId());
+        return cached;
     }
 }

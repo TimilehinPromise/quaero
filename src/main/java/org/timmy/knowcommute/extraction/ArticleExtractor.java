@@ -1,26 +1,31 @@
 package org.timmy.knowcommute.extraction;
 
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
+import static org.timmy.knowcommute.extraction.ArticleText.countWords;
+import static org.timmy.knowcommute.extraction.ArticleText.normalise;
+import static org.timmy.knowcommute.extraction.ArticleText.sha256;
+import static org.timmy.knowcommute.extraction.ArticleText.sourceDomain;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class ArticleExtractor {
+public class ArticleExtractor implements DocumentExtractor {
 
     private static final List<String> CONTENT_SELECTORS = List.of(
             "div.x-article-body", "article", "[role=main]", "main", "div.post-content",
-            "div.entry-content", "div.article-body");
+            "div.entry-content", "div.article-body", "#content-blocks");
 
     private static final String CHROME_SELECTOR =
             "script, style, noscript, nav, aside, footer, header, form, iframe, svg,"
@@ -32,11 +37,21 @@ public class ArticleExtractor {
 
     private static final int MIN_BLOCK_WORDS = 25;
     private static final double MAX_LINK_DENSITY = 0.5;
+    private static final int MAX_TITLE_CHARS = 150;
+
+    private static final java.util.regex.Pattern PLACEHOLDER_TITLE =
+            java.util.regex.Pattern.compile("^.*\\(@\\w+\\) on X$|^.* on X: .*$");
 
     private final ExtractionProperties properties;
 
+    @Override
+    public Set<MediaType> supportedTypes() {
+        return Set.of(MediaType.TEXT_HTML, MediaType.APPLICATION_XHTML_XML);
+    }
+
+    @Override
     public ExtractedArticle extract(FetchedPage page) {
-        Document document = Jsoup.parse(page.html(), page.finalUrl().toString());
+        Document document = parse(page);
         rejectIfChallengePage(document);
 
         Element content = selectContent(document);
@@ -51,7 +66,22 @@ public class ArticleExtractor {
         }
 
         return new ExtractedArticle(
-                title(document), sourceDomain(page.finalUrl()), text, wordCount, sha256(text));
+                title(document), author(document), sourceDomain(page.finalUrl()),
+                text, wordCount, sha256(text));
+    }
+
+    /**
+     * The declared charset is a hint, not the answer. Jsoup re-reads it from the meta tag or
+     * the BOM when the header omits it or gets it wrong, which older sites regularly do.
+     */
+    private Document parse(FetchedPage page) {
+        Charset declared = page.contentType() == null ? null : page.contentType().getCharset();
+        try {
+            return Jsoup.parse(new ByteArrayInputStream(page.body()),
+                    declared == null ? null : declared.name(), page.finalUrl().toString());
+        } catch (IOException e) {
+            throw new ExtractionException("Could not read the page as HTML", e);
+        }
     }
 
     /**
@@ -112,31 +142,31 @@ public class ArticleExtractor {
 
     private String title(Document document) {
         String ogTitle = document.select("meta[property=og:title]").attr("content");
-        String title = !ogTitle.isBlank() ? ogTitle : document.title();
+        if (!ogTitle.isBlank() && !PLACEHOLDER_TITLE.matcher(ogTitle.trim()).matches()) {
+            return normalise(ogTitle);
+        }
+        String description = document.select("meta[property=og:description]").attr("content");
+        if (!description.isBlank() && description.trim().length() <= MAX_TITLE_CHARS) {
+            return normalise(description);
+        }
+        Element headline = document.selectFirst("h1");
+        if (headline != null && !headline.text().isBlank()) {
+            return normalise(headline.text());
+        }
+        String title = document.title();
         return title.isBlank() ? "Untitled" : normalise(title);
     }
 
-    private String sourceDomain(URI url) {
-        String host = url.getHost();
-        return host == null ? "" : host.replaceFirst("^www\\.", "");
-    }
-
-    private String normalise(String text) {
-        return text.replaceAll("\\s+", " ").trim();
-    }
-
-    private int countWords(String text) {
-        String trimmed = text.trim();
-        return trimmed.isEmpty() ? 0 : trimmed.split("\\s+").length;
-    }
-
-    private String sha256(String text) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(text.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is required by the JDK", e);
+    private String author(Document document) {
+        String creator = document.select("meta[name=twitter:creator]").attr("content");
+        if (!creator.isBlank()) {
+            return normalise(creator);
         }
+        String metaAuthor = document.select("meta[name=author]").attr("content");
+        if (!metaAuthor.isBlank()) {
+            return normalise(metaAuthor);
+        }
+        String articleAuthor = document.select("meta[property=article:author]").attr("content");
+        return articleAuthor.isBlank() ? null : normalise(articleAuthor);
     }
 }

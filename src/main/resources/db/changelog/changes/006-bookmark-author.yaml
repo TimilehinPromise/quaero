@@ -1,0 +1,15 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-add-bookmark-author
+      author: timmy
+      changes:
+        - addColumn:
+            tableName: bookmarks
+            columns:
+              - column:
+                  name: author
+                  type: varchar(255)
+      rollback:
+        - dropColumn:
+            tableName: bookmarks
+            columnName: author

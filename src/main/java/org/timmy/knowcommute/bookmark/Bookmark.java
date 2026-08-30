@@ -42,6 +42,9 @@ public class Bookmark extends Auditable {
     @Column(length = 512)
     private String title;
 
+    @Column(length = 255)
+    private String author;
+
     @Column(name = "source_domain", length = 255)
     private String sourceDomain;
 
@@ -97,9 +100,10 @@ public class Bookmark extends Auditable {
         return new Bookmark(user, url, summaryLength);
     }
 
-    public void applyExtraction(String title, String sourceDomain, String extractedText,
+    public void applyExtraction(String title, String author, String sourceDomain, String extractedText,
                                 int wordCount, String contentHash) {
         this.title = title;
+        this.author = author;
         this.sourceDomain = sourceDomain;
         this.extractedText = extractedText;
         this.wordCount = wordCount;
@@ -155,6 +159,11 @@ public class Bookmark extends Auditable {
         this.lastError = error;
         this.nextAttemptAt = null;
         this.status = BookmarkStatus.FAILED;
+    }
+
+    /** Recovery from FAILED or BLOCKED: start the pipeline over from extraction. */
+    public void requeue() {
+        advanceTo(BookmarkStatus.PENDING);
     }
 
     public void softDelete() {

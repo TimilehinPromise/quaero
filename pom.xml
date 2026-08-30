@@ -58,6 +58,12 @@
 			<artifactId>jsoup</artifactId>
 			<version>1.23.1</version>
 		</dependency>
+		<!-- Text extraction for PDF bookmarks. Not managed by the Boot BOM, so pinned here. -->
+		<dependency>
+			<groupId>org.apache.pdfbox</groupId>
+			<artifactId>pdfbox</artifactId>
+			<version>3.0.4</version>
+		</dependency>
 		<!-- Provider abstraction: swapping models is a starter + config change, not a rewrite. -->
 		<dependency>
 			<groupId>org.springframework.ai</groupId>

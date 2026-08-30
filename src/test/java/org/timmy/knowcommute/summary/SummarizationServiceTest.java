@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
@@ -27,11 +30,16 @@ class SummarizationServiceTest {
             """;
 
     private final AtomicReference<String> lastPrompt = new AtomicReference<>();
-    private final AtomicReference<String> reply = new AtomicReference<>("a spoken summary");
+    private final AtomicInteger modelCalls = new AtomicInteger();
+    /** Replies are consumed in order; once drained the stub keeps answering with the default. */
+    private final Queue<String> replies = new ConcurrentLinkedQueue<>();
 
     private final ChatModel stubModel = prompt -> {
+        modelCalls.incrementAndGet();
         lastPrompt.set(prompt.getContents());
-        return new ChatResponse(List.of(new Generation(new AssistantMessage(reply.get()))));
+        String next = replies.poll();
+        return new ChatResponse(List.of(new Generation(new AssistantMessage(
+                next == null ? "a spoken summary" : next))));
     };
 
     private final Resource template = new ByteArrayResource(TEMPLATE.getBytes()) {
@@ -101,10 +109,50 @@ class SummarizationServiceTest {
 
     @Test
     void rejectsAnEmptyModelResponse() {
-        reply.set("   ");
+        replies.add("   ");
 
         assertThatExceptionOfType(SummarizationException.class).isThrownBy(() ->
                 service(40_000).summarise("t", "example.com", "body", SummaryLength.MEDIUM));
+    }
+
+    @Test
+    void asksTheModelToTightenWhenTheFirstDraftBreachesTheCeiling() {
+        replies.add("word ".repeat(1_000));
+        replies.add("tightened summary");
+
+        String summary = service(40_000)
+                .summarise("t", "example.com", "the article body", SummaryLength.MEDIUM);
+
+        assertThat(summary).isEqualTo("tightened summary");
+        assertThat(modelCalls).hasValue(2);
+        assertThat(lastPrompt.get())
+                .contains("1000 words")
+                .contains(String.valueOf(SummaryLength.MEDIUM.targetWords()));
+    }
+
+    @Test
+    void truncatesAtASentenceBoundaryWhenTheModelIgnoresTheCorrection() {
+        replies.add("Short sentence here. ".repeat(400));
+        replies.add("Still too long. ".repeat(400));
+
+        String summary = service(40_000)
+                .summarise("t", "example.com", "the article body", SummaryLength.MEDIUM);
+
+        assertThat(summary.trim().split("\\s+")).hasSizeLessThanOrEqualTo(SummaryLength.MEDIUM.targetWords());
+        assertThat(summary).endsWith(".");
+        assertThat(modelCalls).hasValue(2);
+    }
+
+    @Test
+    void acceptsOvershootWithinTheToleratedCeilingWithoutRetrying() {
+        // Over the 750 target but under the 1.30x gate: no retry, no truncation.
+        replies.add("word ".repeat(900));
+
+        String summary = service(40_000)
+                .summarise("t", "example.com", "the article body", SummaryLength.MEDIUM);
+
+        assertThat(summary.trim().split("\\s+")).hasSize(900);
+        assertThat(modelCalls).hasValue(1);
     }
 
     @Test

@@ -17,6 +17,7 @@ class TestHttpServer implements AutoCloseable {
 
     private final HttpServer server;
     private final AtomicInteger requestCount = new AtomicInteger();
+    private volatile String lastAcceptHeader = "";
 
     private TestHttpServer() {
         try {
@@ -32,12 +33,18 @@ class TestHttpServer implements AutoCloseable {
     }
 
     TestHttpServer respond(String path, int status, String body) {
+        return respond(path, status, "text/html; charset=utf-8", body.getBytes(StandardCharsets.UTF_8));
+    }
+
+    TestHttpServer respond(String path, int status, String contentType, byte[] body) {
         server.createContext(path, exchange -> {
             requestCount.incrementAndGet();
-            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().add("Content-Type", "text/html; charset=utf-8");
-            exchange.sendResponseHeaders(status, bytes.length);
-            exchange.getResponseBody().write(bytes);
+            lastAcceptHeader = String.valueOf(exchange.getRequestHeaders().getFirst("Accept"));
+            if (contentType != null) {
+                exchange.getResponseHeaders().add("Content-Type", contentType);
+            }
+            exchange.sendResponseHeaders(status, body.length);
+            exchange.getResponseBody().write(body);
             exchange.close();
         });
         return this;
@@ -59,6 +66,10 @@ class TestHttpServer implements AutoCloseable {
 
     int requestCount() {
         return requestCount.get();
+    }
+
+    String lastAcceptHeader() {
+        return lastAcceptHeader;
     }
 
     @Override

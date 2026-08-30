@@ -3,7 +3,9 @@ package org.timmy.knowcommute.summary;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
+import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,6 +33,8 @@ class SummarizationStepTest {
     private DeviceUserRepository users;
 
     private final AtomicInteger modelCalls = new AtomicInteger();
+    /** Replies are consumed in order; once drained the stub keeps answering with the default. */
+    private final Queue<String> serviceReplies = new ConcurrentLinkedQueue<>();
     private DeviceUser owner;
     private SummarizationStep step;
 
@@ -40,12 +44,14 @@ class SummarizationStepTest {
         users.deleteAllInBatch();
         owner = users.saveAndFlush(DeviceUser.withDeviceId(UUID.randomUUID().toString()));
         modelCalls.set(0);
+        serviceReplies.clear();
 
         SummarizationService service = new SummarizationService(null, null, null) {
             @Override
             public String summarise(String title, String domain, String article, SummaryLength length) {
                 modelCalls.incrementAndGet();
-                return "freshly generated summary";
+                String next = serviceReplies.poll();
+                return next == null ? "freshly generated summary" : next;
             }
         };
         step = new SummarizationStep(service, bookmarks);
@@ -53,7 +59,7 @@ class SummarizationStepTest {
 
     private Bookmark givenExtracted(String url, String hash) {
         Bookmark bookmark = Bookmark.pending(owner, url, SummaryLength.MEDIUM);
-        bookmark.applyExtraction("A Title", "example.com", "the article body", 400, hash);
+        bookmark.applyExtraction("A Title", null, "example.com", "the article body", 400, hash);
         return bookmarks.saveAndFlush(bookmark);
     }
 
@@ -89,7 +95,7 @@ class SummarizationStepTest {
         bookmarks.saveAndFlush(medium);
 
         Bookmark shortVersion = Bookmark.pending(owner, "https://example.com/two", SummaryLength.SHORT);
-        shortVersion.applyExtraction("A Title", "example.com", "the article body", 400, HASH);
+        shortVersion.applyExtraction("A Title", null, "example.com", "the article body", 400, HASH);
         step.execute(bookmarks.saveAndFlush(shortVersion));
 
         assertThat(modelCalls).hasValue(2);
@@ -100,6 +106,22 @@ class SummarizationStepTest {
         step.execute(givenExtracted("https://example.com/one", HASH));
         step.execute(givenExtracted("https://example.com/two", "b".repeat(64)));
 
+        assertThat(modelCalls).hasValue(2);
+    }
+
+    @Test
+    void regeneratesInsteadOfReusingACachedSummaryThatBreachesTheCeiling() {
+        // A summary cached before the ceiling gate existed: 1,000 words against MEDIUM's 975 allowance.
+        serviceReplies.add("word ".repeat(1_000));
+        Bookmark first = givenExtracted("https://example.com/one", HASH);
+        step.execute(first);
+        bookmarks.saveAndFlush(first);
+
+        Bookmark duplicate = givenExtracted("https://other.example.com/same-article", HASH);
+        step.execute(duplicate);
+
+        assertThat(duplicate.getSummaryText()).isEqualTo("freshly generated summary");
+        assertThat(duplicate.getStatus()).isEqualTo(BookmarkStatus.GENERATING_AUDIO);
         assertThat(modelCalls).hasValue(2);
     }
 

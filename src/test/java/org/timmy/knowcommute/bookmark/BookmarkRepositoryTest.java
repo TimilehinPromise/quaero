@@ -98,7 +98,7 @@ class BookmarkRepositoryTest {
         Bookmark bookmark = bookmarks.saveAndFlush(
                 Bookmark.pending(owner, ARTICLE_URL, SummaryLength.MEDIUM));
 
-        bookmark.applyExtraction("An Article", "example.com", "body text", 420, "hash");
+        bookmark.applyExtraction("An Article", null, "example.com", "body text", 420, "hash");
         assertThat(bookmark.getStatus()).isEqualTo(BookmarkStatus.SUMMARIZING);
 
         bookmark.applySummary("a summary");
@@ -149,7 +149,7 @@ class BookmarkRepositoryTest {
         bookmark.claim(Instant.now().plusSeconds(300));
         bookmark.scheduleRetry("transient failure", Instant.now().plusSeconds(30));
 
-        bookmark.applyExtraction("An Article", "example.com", "body text", 420, "hash");
+        bookmark.applyExtraction("An Article", null, "example.com", "body text", 420, "hash");
 
         assertThat(bookmark.getLastError()).isNull();
         assertThat(bookmark.getNextAttemptAt()).isNull();

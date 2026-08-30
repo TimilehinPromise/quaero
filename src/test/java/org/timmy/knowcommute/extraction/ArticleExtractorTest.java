@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.MediaType;
 
 class ArticleExtractorTest {
 
@@ -20,10 +21,14 @@ class ArticleExtractorTest {
 
     private FetchedPage fixture(String name, String url) {
         try (var in = new ClassPathResource("fixtures/" + name).getInputStream()) {
-            return new FetchedPage(URI.create(url), new String(in.readAllBytes(), StandardCharsets.UTF_8));
+            return new FetchedPage(URI.create(url), MediaType.TEXT_HTML, in.readAllBytes());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    private static FetchedPage page(String url, String html) {
+        return new FetchedPage(URI.create(url), MediaType.TEXT_HTML, html.getBytes(StandardCharsets.UTF_8));
     }
 
     @Test
@@ -51,6 +56,29 @@ class ArticleExtractorTest {
     }
 
     @Test
+    void skipsAPlaceholderOgTitleForTheRealHeadline() {
+        ExtractedArticle article = extractor.extract(
+                fixture("x-longform-article.html",
+                        "https://x.com/lmkeev/status/2076592014322176308"));
+
+        assertThat(article.title())
+                .isEqualTo("How to build an audience when you hate building a \"personal brand\"");
+        assertThat(article.author()).isEqualTo("@lmkeev");
+    }
+
+    @Test
+    void extractsABeehiivNewsletter() {
+        ExtractedArticle article = extractor.extract(
+                fixture("beehiiv-newsletter.html",
+                        "https://newsletter.tokenizedpod.com/p/ep-95-the-era-of-24-7-money"));
+
+        assertThat(article.wordCount()).isGreaterThan(500);
+        assertThat(article.text()).contains("Stablecard");
+        assertThat(article.text()).contains("Wells Fargo");
+        assertThat(article.sourceDomain()).isEqualTo("newsletter.tokenizedpod.com");
+    }
+
+    @Test
     void refusesACloudflareChallengeRatherThanSummarisingIt() {
         assertThatExceptionOfType(SiteBlockedException.class).isThrownBy(() ->
                 extractor.extract(fixture("cloudflare-challenge.html",
@@ -66,8 +94,7 @@ class ArticleExtractorTest {
 
     @Test
     void stripsWwwFromTheSourceDomain() {
-        ExtractedArticle article = extractor.extract(new FetchedPage(
-                URI.create("https://www.example.com/post"),
+        ExtractedArticle article = extractor.extract(page("https://www.example.com/post",
                 "<html><head><title>A Post</title></head><body><article><p>"
                         + "word ".repeat(200) + "</p></article></body></html>"));
 
@@ -76,8 +103,7 @@ class ArticleExtractorTest {
 
     @Test
     void prefersOpenGraphTitleOverDocumentTitle() {
-        ExtractedArticle article = extractor.extract(new FetchedPage(
-                URI.create("https://example.com/post"),
+        ExtractedArticle article = extractor.extract(page("https://example.com/post",
                 "<html><head><title>Site Name | Real Title</title>"
                         + "<meta property=\"og:title\" content=\"Real Title\"></head>"
                         + "<body><article><p>" + "word ".repeat(200) + "</p></article></body></html>"));
@@ -88,7 +114,7 @@ class ArticleExtractorTest {
     @Test
     void rejectsContentBelowTheMinimumWordCount() {
         assertThatExceptionOfType(ExtractionException.class).isThrownBy(() ->
-                extractor.extract(new FetchedPage(URI.create("https://example.com/short"),
+                extractor.extract(page("https://example.com/short",
                         "<html><body><article><p>Too short to narrate.</p></article></body></html>")));
     }
 
@@ -96,10 +122,8 @@ class ArticleExtractorTest {
     void hashesContentSoIdenticalTextIsRecognised() {
         String html = "<html><body><article><p>" + "word ".repeat(200) + "</p></article></body></html>";
 
-        ExtractedArticle first = extractor.extract(
-                new FetchedPage(URI.create("https://a.example.com/x"), html));
-        ExtractedArticle second = extractor.extract(
-                new FetchedPage(URI.create("https://b.example.com/y"), html));
+        ExtractedArticle first = extractor.extract(page("https://a.example.com/x", html));
+        ExtractedArticle second = extractor.extract(page("https://b.example.com/y", html));
 
         assertThat(first.contentHash()).isEqualTo(second.contentHash()).hasSize(64);
     }

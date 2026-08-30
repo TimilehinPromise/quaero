@@ -55,6 +55,11 @@ public class BookmarkController {
         return bookmarkService.pasteContent(user, id, request);
     }
 
+    @PostMapping("/{id}/retry")
+    public BookmarkDetail retry(@CurrentUser DeviceUser user, @PathVariable UUID id) {
+        return bookmarkService.retry(user, id);
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@CurrentUser DeviceUser user, @PathVariable UUID id) {

@@ -4,6 +4,8 @@ import io.netty.channel.ChannelOption;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.springframework.http.HttpHeaders;
@@ -22,17 +24,35 @@ public class ArticleFetcher {
 
     private static final Set<Integer> BLOCKING_STATUSES = Set.of(401, 402, 403, 407, 429, 451);
 
+    /**
+     * Absent Content-Type is read as HTML rather than refused. Servers that omit it are
+     * overwhelmingly serving pages, and refusing them would reject articles that work today.
+     */
+    private static final MediaType ASSUMED_TYPE = MediaType.TEXT_HTML;
+
     private final WebClient webClient;
     private final UrlValidator urlValidator;
     private final ExtractionProperties properties;
+    private final List<DocumentExtractor> extractors;
+    private final List<MediaType> acceptedTypes;
 
     public ArticleFetcher(UrlValidator urlValidator, PrivateAddressPolicy addressPolicy,
-                          ExtractionProperties properties) {
+                          ExtractionProperties properties, List<DocumentExtractor> extractors) {
         this.urlValidator = urlValidator;
         this.properties = properties;
+        this.extractors = List.copyOf(extractors);
+        this.acceptedTypes = extractors.stream()
+                .flatMap(extractor -> extractor.supportedTypes().stream())
+                .distinct()
+                .sorted(Comparator.comparing(MediaType::toString))
+                .toList();
         this.webClient = WebClient.builder()
                 .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
                         httpClient(addressPolicy, properties)))
+                .exchangeStrategies(org.springframework.web.reactive.function.client.ExchangeStrategies.builder()
+                        .codecs(codecs -> codecs.defaultCodecs()
+                                .maxInMemorySize(properties.maxResponseBytes()))
+                        .build())
                 .build();
     }
 
@@ -46,7 +66,7 @@ public class ArticleFetcher {
             urlValidator.validate(current.toString());
             Redirected redirected = attempt(current);
             if (redirected.location() == null) {
-                return new FetchedPage(current, redirected.body());
+                return new FetchedPage(current, redirected.contentType(), redirected.body());
             }
             current = current.resolve(redirected.location());
         }
@@ -57,14 +77,14 @@ public class ArticleFetcher {
         return webClient.get()
                 .uri(url)
                 .header(HttpHeaders.USER_AGENT, properties.userAgent())
-                .accept(MediaType.TEXT_HTML, MediaType.APPLICATION_XHTML_XML)
+                .accept(acceptedTypes.toArray(MediaType[]::new))
                 .exchangeToMono(response -> {
                     HttpStatusCode status = response.statusCode();
                     if (status.is3xxRedirection()) {
                         String location = response.headers().header(HttpHeaders.LOCATION)
                                 .stream().findFirst().orElse(null);
                         return response.releaseBody()
-                                .thenReturn(new Redirected(location, null));
+                                .thenReturn(new Redirected(location, null, null));
                     }
                     if (BLOCKING_STATUSES.contains(status.value())) {
                         return response.releaseBody().then(reactor.core.publisher.Mono.error(
@@ -75,9 +95,15 @@ public class ArticleFetcher {
                         return response.releaseBody().then(reactor.core.publisher.Mono.error(
                                 new ExtractionException("Fetch failed with HTTP " + status.value())));
                     }
-                    return response.bodyToMono(String.class)
-                            .defaultIfEmpty("")
-                            .map(body -> new Redirected(null, body));
+                    MediaType contentType = response.headers().contentType().orElse(ASSUMED_TYPE);
+                    if (!isReadable(contentType)) {
+                        return response.releaseBody().then(reactor.core.publisher.Mono.error(
+                                new UnsupportedContentException(
+                                        "Cannot read " + contentType + " as an article")));
+                    }
+                    return response.bodyToMono(byte[].class)
+                            .defaultIfEmpty(new byte[0])
+                            .map(body -> new Redirected(null, contentType, body));
                 })
                 .block(properties.readTimeout().plusSeconds(5));
     }
@@ -112,7 +138,15 @@ public class ArticleFetcher {
         }
     }
 
-    private record Redirected(String location, String body) {
+    /**
+     * Refused on the response headers, before the body is read: a video or an archive would
+     * otherwise be pulled down to the size cap only to be thrown away.
+     */
+    private boolean isReadable(MediaType contentType) {
+        return extractors.stream().anyMatch(extractor -> extractor.supports(contentType));
+    }
+
+    private record Redirected(String location, MediaType contentType, byte[] body) {
     }
 
     static boolean isBlockingStatus(HttpStatus status) {

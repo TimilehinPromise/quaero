@@ -45,7 +45,7 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(BookmarkNotRecoverableException.class)
     public ProblemDetail onNotRecoverable(BookmarkNotRecoverableException e) {
-        return problem(HttpStatus.CONFLICT, "not-recoverable", "Cannot paste content", e.getMessage());
+        return problem(HttpStatus.CONFLICT, "not-recoverable", "Bookmark not recoverable", e.getMessage());
     }
 
     @ExceptionHandler(InvalidUrlException.class)
