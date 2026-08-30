@@ -70,10 +70,9 @@ jobs:
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
           COOLIFY_UUID: ${{ secrets.COOLIFY_RESOURCE_UUID }}
         run: |
-          if [ -z "$COOLIFY_URL" ] || [ -z "$COOLIFY_TOKEN" ] || [ -z "$COOLIFY_UUID" ]; then
-            echo "Coolify secrets not configured; skipping deploy trigger."
-            exit 0
-          fi
+          : "${COOLIFY_URL:?secret is not set - the image was pushed but nothing was deployed}"
+          : "${COOLIFY_TOKEN:?secret is not set - the image was pushed but nothing was deployed}"
+          : "${COOLIFY_UUID:?secret is not set - the image was pushed but nothing was deployed}"
           curl --fail --silent --show-error \
             -H "Authorization: Bearer $COOLIFY_TOKEN" \
             "$COOLIFY_URL/api/v1/deploy?uuid=$COOLIFY_UUID&force=false"
