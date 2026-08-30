@@ -14,7 +14,6 @@ services:
       SUMMARY_API_KEY: ${SUMMARY_API_KEY}
       READCAST_SUMMARY_MODEL: ${READCAST_SUMMARY_MODEL:-nvidia/nemotron-3-ultra-550b-a55b:free}
 
-
       KOKORO_BASE_URL: ${KOKORO_BASE_URL:-http://kokoro:8880/v1}
       KOKORO_TIMEOUT: ${KOKORO_TIMEOUT:-15m}
       KOKORO_MAX_CONCURRENT: ${KOKORO_MAX_CONCURRENT:-2}
@@ -31,3 +30,13 @@ services:
       timeout: 5s
       retries: 5
       start_period: 90s
+    # A stable name for the Nginx upstream. Coolify suffixes container names with the resource
+    # UUID, so the generated name changes and cannot be written into a proxy config.
+    networks:
+      coolify:
+        aliases:
+          - zeteo
+
+networks:
+  coolify:
+    external: true
