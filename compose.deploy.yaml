@@ -1,5 +1,5 @@
 services:
-  app:
+  zeteo:
     image: ghcr.io/timilehinpromise/know-commute:${READCAST_IMAGE_TAG:-latest}
     pull_policy: always
     restart: unless-stopped
