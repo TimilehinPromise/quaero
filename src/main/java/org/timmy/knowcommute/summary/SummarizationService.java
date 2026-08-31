@@ -4,6 +4,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.timmy.knowcommute.bookmark.SummaryLength;
@@ -52,6 +53,7 @@ public class SummarizationService {
 
     private String generate(String title, String sourceDomain, String input, SummaryLength length) {
         String summary = chatClientBuilder.build().prompt()
+                .options(timeoutOption())
                 .user(spec -> spec.text(promptTemplate).params(Map.of(
                         "targetWords", String.valueOf(length.targetWords()),
                         "paragraphs", String.valueOf(Math.max(length.targetWords() / 110, 2)),
@@ -74,6 +76,7 @@ public class SummarizationService {
      */
     private String tighten(String summary, SummaryLength length) {
         String tightened = chatClientBuilder.build().prompt()
+                .options(timeoutOption())
                 .user("""
                         This narration is %d words — over the %d-word ceiling.
 
@@ -107,6 +110,22 @@ public class SummarizationService {
             words += sentenceWords;
         }
         return kept.toString().trim();
+    }
+
+    /**
+     * The timeout rides on the call because it cannot be configured anywhere else. Spring AI
+     * 2.0.1 drops both {@code spring.ai.openai.chat.timeout} and
+     * {@code spring.ai.openai.chat.options.timeout} before they reach the client, so
+     * openai-java's 60s default stands — and a long summary generates for longer than that,
+     * which arrives as an HTTP/2 stream reset rather than a timeout. Options set per call do
+     * reach the wire, and merge over the configured model and token limit rather than
+     * replacing them.
+     *
+     * <p>Provider-specific: pointing {@code spring.ai.model.chat} at anthropic means changing
+     * this line too.
+     */
+    private OpenAiChatOptions.Builder timeoutOption() {
+        return OpenAiChatOptions.builder().timeout(properties.timeout());
     }
 
     private static int wordCount(String text) {

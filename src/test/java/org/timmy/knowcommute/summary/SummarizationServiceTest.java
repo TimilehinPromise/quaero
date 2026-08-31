@@ -51,7 +51,7 @@ class SummarizationServiceTest {
 
     private SummarizationService service(int maxInputWords) {
         return new SummarizationService(ChatClient.builder(stubModel),
-                new SummarizationProperties(maxInputWords), template);
+                new SummarizationProperties(maxInputWords, java.time.Duration.ofMinutes(5)), template);
     }
 
     @Test
