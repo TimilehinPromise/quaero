@@ -19,13 +19,16 @@ public class SummarizationService {
     private final Resource promptTemplate;
 
     public String summarise(String title, String sourceDomain, String article, SummaryLength length) {
-        SummaryTarget target = targetFor(length, article);
+        String input = truncateToBudget(article);
+        int inputWords = wordCount(input);
+
+        SummaryTarget target = targetFor(length, inputWords);
         if (target.targetWords() < length.targetWords()) {
             log.info("{} asks for {} words but the article is {} words; aiming for {}",
-                    length, length.targetWords(), wordCount(article), target.targetWords());
+                    length, length.targetWords(), inputWords, target.targetWords());
         }
 
-        String summary = generate(title, sourceDomain, truncateToBudget(article), target);
+        String summary = generate(title, sourceDomain, input, target);
         if (exceedsCeiling(summary, target)) {
             log.warn("Summary ran {} words against the {}-word ceiling; asking the model to tighten it",
                     wordCount(summary), target.targetWords());
@@ -46,16 +49,27 @@ public class SummarizationService {
      * within LONG when it was written.
      */
     public boolean exceedsCeiling(String summary, SummaryLength length, String article) {
-        return exceedsCeiling(summary, targetFor(length, article));
+        return exceedsCeiling(summary, targetFor(length, inputWordCount(article)));
     }
 
     private boolean exceedsCeiling(String summary, SummaryTarget target) {
         return wordCount(summary) > target.allowedWords();
     }
 
-    private SummaryTarget targetFor(SummaryLength length, String article) {
-        return SummaryTarget.forArticle(length, wordCount(article),
+    private SummaryTarget targetFor(SummaryLength length, int inputWords) {
+        return SummaryTarget.forArticle(length, inputWords,
                 properties.maxSourceFraction(), properties.minWords());
+    }
+
+    /**
+     * How much article the model will actually be given. The cap has to follow that rather than
+     * the extracted length: an article over the input budget is truncated before it is
+     * summarised, and a target derived from words the model never sees asks for a summary its
+     * input cannot support. With the shipped budget the requested length always binds first, so
+     * this only bites if {@code max-input-words} drops below about 4,500.
+     */
+    private int inputWordCount(String article) {
+        return Math.min(wordCount(article), properties.maxInputWords());
     }
 
     private String generate(String title, String sourceDomain, String input, SummaryTarget target) {

@@ -146,6 +146,31 @@ class SummarizationServiceTest {
     }
 
     @Test
+    void capsAgainstTheTruncatedInputRatherThanTheWholeArticle() {
+        // 500 words in, but only 100 reach the model, so a third of 100 is what it can support.
+        service(100, 0.33, 1)
+                .summarise("t", "example.com", "zyzzyva ".repeat(500), SummaryLength.LONG);
+
+        assertThat(lastPrompt.get()).contains("33");
+        assertThat(occurrences("zyzzyva")).isEqualTo(100);
+    }
+
+    @Test
+    void judgesACachedSummaryAgainstTheTruncatedInputTooSoTheGateAgreesWithGeneration() {
+        SummarizationService service = service(100, 0.33, 1);
+        String article = "zyzzyva ".repeat(500);
+
+        service.summarise("t", "example.com", article, SummaryLength.LONG);
+        String generatedFor = lastPrompt.get();
+
+        assertThat(generatedFor).contains("33");
+        assertThat(service.exceedsCeiling("word ".repeat(50).trim(), SummaryLength.LONG, article))
+                .isTrue();
+        assertThat(service.exceedsCeiling("word ".repeat(30).trim(), SummaryLength.LONG, article))
+                .isFalse();
+    }
+
+    @Test
     void rejectsAnEmptyModelResponse() {
         replies.add("   ");
 
