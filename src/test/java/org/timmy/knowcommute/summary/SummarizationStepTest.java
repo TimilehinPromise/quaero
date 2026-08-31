@@ -46,7 +46,11 @@ class SummarizationStepTest {
         modelCalls.set(0);
         serviceReplies.clear();
 
-        SummarizationService service = new SummarizationService(null, null, null) {
+        // Real properties because the ceiling gate reads them; a fraction this large never
+        // binds, so these cases keep testing reuse rather than the article-length cap.
+        SummarizationProperties properties = new SummarizationProperties(
+                40_000, java.time.Duration.ofMinutes(5), 100_000.0, 1);
+        SummarizationService service = new SummarizationService(null, properties, null) {
             @Override
             public String summarise(String title, String domain, String article, SummaryLength length) {
                 modelCalls.incrementAndGet();

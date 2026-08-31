@@ -97,7 +97,7 @@ class SummarizationTimeoutTest {
         contextWith(baseUrl).run(context -> {
             SummarizationService service = new SummarizationService(
                     context.getBean(ChatClient.Builder.class),
-                    new SummarizationProperties(40000, Duration.ofMinutes(5)),
+                    new SummarizationProperties(40000, Duration.ofMinutes(5), 1.0, 1),
                     new ClassPathResource("prompts/summarise-article.st"));
 
             service.summarise("A Title", "example.com", "Article body.", SummaryLength.SHORT);
@@ -113,7 +113,7 @@ class SummarizationTimeoutTest {
         contextWith(baseUrl).run(context -> {
             SummarizationService service = new SummarizationService(
                     context.getBean(ChatClient.Builder.class),
-                    new SummarizationProperties(40000, Duration.ofMinutes(5)),
+                    new SummarizationProperties(40000, Duration.ofMinutes(5), 1.0, 1),
                     new ClassPathResource("prompts/summarise-article.st"));
 
             // A per-call option replacing rather than merging would drop both and OpenRouter

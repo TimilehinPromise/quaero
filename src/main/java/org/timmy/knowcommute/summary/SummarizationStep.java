@@ -46,7 +46,7 @@ public class SummarizationStep implements PipelineStep {
      */
     private String reuseWithinCeiling(Bookmark existing, Bookmark bookmark, String article) {
         String cached = existing.getSummaryText();
-        if (summarizationService.exceedsCeiling(cached, bookmark.getSummaryLength())) {
+        if (summarizationService.exceedsCeiling(cached, bookmark.getSummaryLength(), article)) {
             log.warn("Cached summary from bookmark {} is over the {} ceiling; regenerating",
                     existing.getId(), bookmark.getSummaryLength());
             return summarizationService.summarise(

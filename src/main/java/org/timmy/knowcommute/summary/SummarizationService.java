@@ -14,49 +14,56 @@ import org.timmy.knowcommute.bookmark.SummaryLength;
 @RequiredArgsConstructor
 public class SummarizationService {
 
-    /**
-     * A model cannot count its own words, so the prompt's ceiling is only advisory. Overshoot
-     * within this factor is accepted — tighter and normal variation trips the retry constantly,
-     * looser and a MEDIUM episode silently runs long.
-     */
-    private static final double CEILING_TOLERANCE = 1.30;
-
     private final ChatClient.Builder chatClientBuilder;
     private final SummarizationProperties properties;
     private final Resource promptTemplate;
 
     public String summarise(String title, String sourceDomain, String article, SummaryLength length) {
-        String input = truncateToBudget(article);
-
-        String summary = generate(title, sourceDomain, input, length);
-        if (exceedsCeiling(summary, length)) {
-            log.warn("Summary ran {} words against the {}-word ceiling; asking the model to tighten it",
-                    wordCount(summary), length.targetWords());
-            summary = tighten(summary, length);
+        SummaryTarget target = targetFor(length, article);
+        if (target.targetWords() < length.targetWords()) {
+            log.info("{} asks for {} words but the article is {} words; aiming for {}",
+                    length, length.targetWords(), wordCount(article), target.targetWords());
         }
-        if (exceedsCeiling(summary, length)) {
+
+        String summary = generate(title, sourceDomain, truncateToBudget(article), target);
+        if (exceedsCeiling(summary, target)) {
+            log.warn("Summary ran {} words against the {}-word ceiling; asking the model to tighten it",
+                    wordCount(summary), target.targetWords());
+            summary = tighten(summary, target);
+        }
+        if (exceedsCeiling(summary, target)) {
             log.warn("Tightened summary is still over the {}-word ceiling; truncating at a sentence boundary",
-                    length.targetWords());
-            summary = truncateAtSentenceBoundary(summary, length.targetWords());
+                    target.targetWords());
+            summary = truncateAtSentenceBoundary(summary, target.targetWords());
         }
         return summary.trim();
     }
 
-    /** True when a summary — fresh from the model or reused from another bookmark — is over the tolerated ceiling. */
-    public boolean exceedsCeiling(String summary, SummaryLength length) {
-        return wordCount(summary) > allowedWords(length);
+    /**
+     * True when a summary — fresh from the model or reused from another bookmark — is over the
+     * tolerated ceiling for this article. The article is needed because the ceiling depends on
+     * it: a cached 1,500-word narration of a short piece is over-long now even though it was
+     * within LONG when it was written.
+     */
+    public boolean exceedsCeiling(String summary, SummaryLength length, String article) {
+        return exceedsCeiling(summary, targetFor(length, article));
     }
 
-    private static int allowedWords(SummaryLength length) {
-        return (int) (length.targetWords() * CEILING_TOLERANCE);
+    private boolean exceedsCeiling(String summary, SummaryTarget target) {
+        return wordCount(summary) > target.allowedWords();
     }
 
-    private String generate(String title, String sourceDomain, String input, SummaryLength length) {
+    private SummaryTarget targetFor(SummaryLength length, String article) {
+        return SummaryTarget.forArticle(length, wordCount(article),
+                properties.maxSourceFraction(), properties.minWords());
+    }
+
+    private String generate(String title, String sourceDomain, String input, SummaryTarget target) {
         String summary = chatClientBuilder.build().prompt()
                 .options(timeoutOption())
                 .user(spec -> spec.text(promptTemplate).params(Map.of(
-                        "targetWords", String.valueOf(length.targetWords()),
-                        "paragraphs", String.valueOf(Math.max(length.targetWords() / 110, 2)),
+                        "targetWords", String.valueOf(target.targetWords()),
+                        "paragraphs", String.valueOf(target.paragraphs()),
                         "title", title == null ? "Untitled" : title,
                         "sourceDomain", sourceDomain == null ? "unknown" : sourceDomain,
                         "article", input)))
@@ -74,7 +81,7 @@ public class SummarizationService {
      * count, and the ceiling restated. Cheaper than resending the article, and the ask —
      * compress what you already wrote — is the same either way.
      */
-    private String tighten(String summary, SummaryLength length) {
+    private String tighten(String summary, SummaryTarget target) {
         String tightened = chatClientBuilder.build().prompt()
                 .options(timeoutOption())
                 .user("""
@@ -84,7 +91,7 @@ public class SummarizationService {
 
                         Rewrite it at or under %d words. Keep every rule: spoken narration, no
                         headings or markdown, no preamble, output only the narration.
-                        """.formatted(wordCount(summary), length.targetWords(), summary, length.targetWords()))
+                        """.formatted(wordCount(summary), target.targetWords(), summary, target.targetWords()))
                 .call()
                 .content();
 
