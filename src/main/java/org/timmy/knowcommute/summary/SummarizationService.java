@@ -4,6 +4,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.timmy.knowcommute.bookmark.SummaryLength;
@@ -13,48 +14,70 @@ import org.timmy.knowcommute.bookmark.SummaryLength;
 @RequiredArgsConstructor
 public class SummarizationService {
 
-    /**
-     * A model cannot count its own words, so the prompt's ceiling is only advisory. Overshoot
-     * within this factor is accepted — tighter and normal variation trips the retry constantly,
-     * looser and a MEDIUM episode silently runs long.
-     */
-    private static final double CEILING_TOLERANCE = 1.30;
-
     private final ChatClient.Builder chatClientBuilder;
     private final SummarizationProperties properties;
     private final Resource promptTemplate;
 
     public String summarise(String title, String sourceDomain, String article, SummaryLength length) {
         String input = truncateToBudget(article);
+        int inputWords = wordCount(input);
 
-        String summary = generate(title, sourceDomain, input, length);
-        if (exceedsCeiling(summary, length)) {
-            log.warn("Summary ran {} words against the {}-word ceiling; asking the model to tighten it",
-                    wordCount(summary), length.targetWords());
-            summary = tighten(summary, length);
+        SummaryTarget target = targetFor(length, inputWords);
+        if (target.targetWords() < length.targetWords()) {
+            log.info("{} asks for {} words but the article is {} words; aiming for {}",
+                    length, length.targetWords(), inputWords, target.targetWords());
         }
-        if (exceedsCeiling(summary, length)) {
+
+        String summary = generate(title, sourceDomain, input, target);
+        if (exceedsCeiling(summary, target)) {
+            log.warn("Summary ran {} words against the {}-word ceiling; asking the model to tighten it",
+                    wordCount(summary), target.targetWords());
+            summary = tighten(summary, target);
+        }
+        if (exceedsCeiling(summary, target)) {
             log.warn("Tightened summary is still over the {}-word ceiling; truncating at a sentence boundary",
-                    length.targetWords());
-            summary = truncateAtSentenceBoundary(summary, length.targetWords());
+                    target.targetWords());
+            summary = truncateAtSentenceBoundary(summary, target.targetWords());
         }
         return summary.trim();
     }
 
-    /** True when a summary — fresh from the model or reused from another bookmark — is over the tolerated ceiling. */
-    public boolean exceedsCeiling(String summary, SummaryLength length) {
-        return wordCount(summary) > allowedWords(length);
+    /**
+     * True when a summary — fresh from the model or reused from another bookmark — is over the
+     * tolerated ceiling for this article. The article is needed because the ceiling depends on
+     * it: a cached 1,500-word narration of a short piece is over-long now even though it was
+     * within LONG when it was written.
+     */
+    public boolean exceedsCeiling(String summary, SummaryLength length, String article) {
+        return exceedsCeiling(summary, targetFor(length, inputWordCount(article)));
     }
 
-    private static int allowedWords(SummaryLength length) {
-        return (int) (length.targetWords() * CEILING_TOLERANCE);
+    private boolean exceedsCeiling(String summary, SummaryTarget target) {
+        return wordCount(summary) > target.allowedWords();
     }
 
-    private String generate(String title, String sourceDomain, String input, SummaryLength length) {
+    private SummaryTarget targetFor(SummaryLength length, int inputWords) {
+        return SummaryTarget.forArticle(length, inputWords,
+                properties.maxSourceFraction(), properties.minWords());
+    }
+
+    /**
+     * How much article the model will actually be given. The cap has to follow that rather than
+     * the extracted length: an article over the input budget is truncated before it is
+     * summarised, and a target derived from words the model never sees asks for a summary its
+     * input cannot support. With the shipped budget the requested length always binds first, so
+     * this only bites if {@code max-input-words} drops below about 4,500.
+     */
+    private int inputWordCount(String article) {
+        return Math.min(wordCount(article), properties.maxInputWords());
+    }
+
+    private String generate(String title, String sourceDomain, String input, SummaryTarget target) {
         String summary = chatClientBuilder.build().prompt()
+                .options(timeoutOption())
                 .user(spec -> spec.text(promptTemplate).params(Map.of(
-                        "targetWords", String.valueOf(length.targetWords()),
-                        "paragraphs", String.valueOf(Math.max(length.targetWords() / 110, 2)),
+                        "targetWords", String.valueOf(target.targetWords()),
+                        "paragraphs", String.valueOf(target.paragraphs()),
                         "title", title == null ? "Untitled" : title,
                         "sourceDomain", sourceDomain == null ? "unknown" : sourceDomain,
                         "article", input)))
@@ -72,8 +95,9 @@ public class SummarizationService {
      * count, and the ceiling restated. Cheaper than resending the article, and the ask —
      * compress what you already wrote — is the same either way.
      */
-    private String tighten(String summary, SummaryLength length) {
+    private String tighten(String summary, SummaryTarget target) {
         String tightened = chatClientBuilder.build().prompt()
+                .options(timeoutOption())
                 .user("""
                         This narration is %d words — over the %d-word ceiling.
 
@@ -81,7 +105,7 @@ public class SummarizationService {
 
                         Rewrite it at or under %d words. Keep every rule: spoken narration, no
                         headings or markdown, no preamble, output only the narration.
-                        """.formatted(wordCount(summary), length.targetWords(), summary, length.targetWords()))
+                        """.formatted(wordCount(summary), target.targetWords(), summary, target.targetWords()))
                 .call()
                 .content();
 
@@ -107,6 +131,22 @@ public class SummarizationService {
             words += sentenceWords;
         }
         return kept.toString().trim();
+    }
+
+    /**
+     * The timeout rides on the call because it cannot be configured anywhere else. Spring AI
+     * 2.0.1 drops both {@code spring.ai.openai.chat.timeout} and
+     * {@code spring.ai.openai.chat.options.timeout} before they reach the client, so
+     * openai-java's 60s default stands — and a long summary generates for longer than that,
+     * which arrives as an HTTP/2 stream reset rather than a timeout. Options set per call do
+     * reach the wire, and merge over the configured model and token limit rather than
+     * replacing them.
+     *
+     * <p>Provider-specific: pointing {@code spring.ai.model.chat} at anthropic means changing
+     * this line too.
+     */
+    private OpenAiChatOptions.Builder timeoutOption() {
+        return OpenAiChatOptions.builder().timeout(properties.timeout());
     }
 
     private static int wordCount(String text) {

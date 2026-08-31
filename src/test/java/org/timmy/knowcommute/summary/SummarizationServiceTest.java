@@ -49,9 +49,18 @@ class SummarizationServiceTest {
         }
     };
 
+    /** A fraction this large never binds, so these cases exercise the ceiling machinery alone. */
+    private static final double NO_CLAMP = 100_000.0;
+
     private SummarizationService service(int maxInputWords) {
+        return service(maxInputWords, NO_CLAMP, 1);
+    }
+
+    private SummarizationService service(int maxInputWords, double maxSourceFraction, int minWords) {
         return new SummarizationService(ChatClient.builder(stubModel),
-                new SummarizationProperties(maxInputWords), template);
+                new SummarizationProperties(maxInputWords, java.time.Duration.ofMinutes(5),
+                        maxSourceFraction, minWords),
+                template);
     }
 
     @Test
@@ -105,6 +114,60 @@ class SummarizationServiceTest {
         service(1000).summarise("t", "example.com", "zyzzyva ".repeat(200), SummaryLength.MEDIUM);
 
         assertThat(occurrences("zyzzyva")).isEqualTo(200);
+    }
+
+    @Test
+    void asksForFewerWordsThanRequestedWhenTheArticleCannotSupportThem() {
+        service(40_000, 0.33, 150)
+                .summarise("t", "example.com", "word ".repeat(2_036), SummaryLength.LONG);
+
+        assertThat(lastPrompt.get())
+                .contains("672")
+                .doesNotContain(String.valueOf(SummaryLength.LONG.targetWords()));
+    }
+
+    @Test
+    void stillAsksForTheFullLengthWhenTheArticleIsLongEnough() {
+        service(40_000, 0.33, 150)
+                .summarise("t", "example.com", "word ".repeat(6_000), SummaryLength.LONG);
+
+        assertThat(lastPrompt.get()).contains(String.valueOf(SummaryLength.LONG.targetWords()));
+    }
+
+    @Test
+    void judgesACachedSummaryAgainstTheArticleItWouldBeServedFor() {
+        String cached = "word ".repeat(1_400).trim();
+        SummarizationService service = service(40_000, 0.33, 150);
+
+        assertThat(service.exceedsCeiling(cached, SummaryLength.LONG, "word ".repeat(6_000)))
+                .isFalse();
+        assertThat(service.exceedsCeiling(cached, SummaryLength.LONG, "word ".repeat(2_036)))
+                .isTrue();
+    }
+
+    @Test
+    void capsAgainstTheTruncatedInputRatherThanTheWholeArticle() {
+        // 500 words in, but only 100 reach the model, so a third of 100 is what it can support.
+        service(100, 0.33, 1)
+                .summarise("t", "example.com", "zyzzyva ".repeat(500), SummaryLength.LONG);
+
+        assertThat(lastPrompt.get()).contains("33");
+        assertThat(occurrences("zyzzyva")).isEqualTo(100);
+    }
+
+    @Test
+    void judgesACachedSummaryAgainstTheTruncatedInputTooSoTheGateAgreesWithGeneration() {
+        SummarizationService service = service(100, 0.33, 1);
+        String article = "zyzzyva ".repeat(500);
+
+        service.summarise("t", "example.com", article, SummaryLength.LONG);
+        String generatedFor = lastPrompt.get();
+
+        assertThat(generatedFor).contains("33");
+        assertThat(service.exceedsCeiling("word ".repeat(50).trim(), SummaryLength.LONG, article))
+                .isTrue();
+        assertThat(service.exceedsCeiling("word ".repeat(30).trim(), SummaryLength.LONG, article))
+                .isFalse();
     }
 
     @Test
