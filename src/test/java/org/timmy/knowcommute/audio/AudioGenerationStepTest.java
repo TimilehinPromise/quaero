@@ -24,7 +24,7 @@ import org.timmy.knowcommute.user.DeviceUser;
 
 class AudioGenerationStepTest {
 
-    private final AtomicReference<String> narratedText = new AtomicReference<>();
+    private final List<String> narratedParts = new ArrayList<>();
     private final AtomicReference<byte[]> audio = new AtomicReference<>(realMp3());
     private final Map<String, byte[]> stored = new HashMap<>();
     private final List<String> deleted = new ArrayList<>();
@@ -40,7 +40,7 @@ class AudioGenerationStepTest {
     private final TextToSpeechModel speechModel = new TextToSpeechModel() {
         @Override
         public byte[] call(String text) {
-            narratedText.set(text);
+            narratedParts.add(text);
             return audio.get();
         }
 
@@ -78,8 +78,11 @@ class AudioGenerationStepTest {
         }
     };
 
+    private static final int CHUNK_CHARS = 1200;
+
     private final TtsProperties ttsProperties = new TtsProperties(
-            null, null, null, null, null, null, java.time.Duration.ofMinutes(1), 1, null, null);
+            null, null, null, null, null, null, java.time.Duration.ofMinutes(1), 1,
+            CHUNK_CHARS, null, null);
 
     private final AudioGenerationStep step =
             new AudioGenerationStep(speechModel, storage, ttsProperties);
@@ -98,7 +101,7 @@ class AudioGenerationStepTest {
 
         step.execute(bookmark);
 
-        assertThat(narratedText.get()).isEqualTo("This is the narration script.");
+        assertThat(narratedParts).containsExactly("This is the narration script.");
         assertThat(bookmark.getStatus()).isEqualTo(BookmarkStatus.READY);
         assertThat(stored).containsKey(bookmark.getAudioStorageKey());
     }
@@ -151,6 +154,69 @@ class AudioGenerationStepTest {
         assertThatExceptionOfType(AudioGenerationException.class)
                 .isThrownBy(() -> step.execute(summarised()));
         assertThat(stored).isEmpty();
+    }
+
+    private Bookmark summarised(String narration) {
+        Bookmark bookmark = Bookmark.pending(
+                DeviceUser.withDeviceId("device"), "https://example.com/a", SummaryLength.LONG);
+        bookmark.applyExtraction("A Title", null, "example.com", "body", 400, "hash");
+        bookmark.applySummary(narration);
+        return bookmark;
+    }
+
+    private static String longNarration() {
+        return "Deterministic execution cannot produce an arithmetic error. ".repeat(80).trim();
+    }
+
+    @Test
+    void narratesALongSummaryInSeveralRequestsRatherThanOne() {
+        step.execute(summarised(longNarration()));
+
+        assertThat(narratedParts).hasSizeGreaterThan(1)
+                .allSatisfy(part -> assertThat(part).hasSizeLessThanOrEqualTo(CHUNK_CHARS));
+    }
+
+    @Test
+    void narratesEveryWordOfALongSummaryExactlyOnce() {
+        String narration = longNarration();
+
+        step.execute(summarised(narration));
+
+        assertThat(String.join(" ", narratedParts)).isEqualTo(narration);
+    }
+
+    @Test
+    void joinsThePartsIntoOnePlayableFileWhoseDurationIsTheirSum() {
+        Bookmark bookmark = summarised(longNarration());
+
+        step.execute(bookmark);
+
+        int parts = narratedParts.size();
+        assertThat(bookmark.getAudioDurationSec()).isEqualTo(6 * parts);
+        assertThat(stored.get(bookmark.getAudioStorageKey())).hasSizeGreaterThan(parts);
+    }
+
+    @Test
+    void leavesNoMetadataTagInsideTheJoinedStream() {
+        Bookmark bookmark = summarised(longNarration());
+
+        step.execute(bookmark);
+
+        byte[] joined = stored.get(bookmark.getAudioStorageKey());
+        assertThat(occurrences(joined, "ID3")).isZero();
+        assertThat(occurrences(joined, "Info")).isZero();
+        assertThat(occurrences(joined, "Xing")).isZero();
+    }
+
+    private static int occurrences(byte[] data, String tag) {
+        byte[] needle = tag.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        int found = 0;
+        for (int i = 0; i + needle.length <= data.length; i++) {
+            if (java.util.Arrays.equals(data, i, i + needle.length, needle, 0, needle.length)) {
+                found++;
+            }
+        }
+        return found;
     }
 
     @Test

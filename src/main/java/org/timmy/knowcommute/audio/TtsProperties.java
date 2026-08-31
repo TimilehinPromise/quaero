@@ -13,6 +13,7 @@ public record TtsProperties(
         Double speed,
         Duration timeout,
         int maxConcurrent,
+        int chunkChars,
         String basicAuthUser,
         String basicAuthPassword) {
 
