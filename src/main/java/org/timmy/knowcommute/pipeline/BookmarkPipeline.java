@@ -12,6 +12,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.timmy.knowcommute.bookmark.Bookmark;
 import org.timmy.knowcommute.bookmark.BookmarkRepository;
 import org.timmy.knowcommute.bookmark.BookmarkStatus;
+import org.timmy.knowcommute.extraction.ExtractionException;
+import org.timmy.knowcommute.extraction.NoReadableContentException;
 import org.timmy.knowcommute.extraction.SiteBlockedException;
 import org.timmy.knowcommute.extraction.UnsupportedContentException;
 
@@ -77,9 +79,13 @@ public class BookmarkPipeline {
     private void recordFailure(UUID bookmarkId, Exception cause) {
         transactions.executeWithoutResult(status -> bookmarks.findById(bookmarkId).ifPresent(bookmark -> {
             String message = describe(cause);
-            if (cause instanceof SiteBlockedException) {
+            if (cause instanceof SiteBlockedException || cause instanceof NoReadableContentException) {
                 bookmark.block(message);
             } else if (cause instanceof UnsupportedContentException) {
+                bookmark.fail(message);
+            } else if (cause instanceof ExtractionException extraction && !extraction.isRetryable()) {
+                // Deterministic: the bytes received already doom the outcome, so the remaining
+                // backoff series would only delay the same answer.
                 bookmark.fail(message);
             } else if (retryPolicy.isExhausted(bookmark.getAttempts())) {
                 bookmark.fail(message);

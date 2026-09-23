@@ -10,5 +10,7 @@ public record ExtractionProperties(
         int maxResponseBytes,
         int maxRedirects,
         int minimumWords,
+        int thinMinimumWords,
+        int briefMinimumChars,
         String userAgent) {
 }
