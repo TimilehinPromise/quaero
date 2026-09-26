@@ -16,7 +16,7 @@ public class AudioRetentionJob {
     private final AudioStorage storage;
     private final AudioProperties properties;
 
-    @Scheduled(cron = "${readcast.audio.retention-cron:0 30 3 * * *}")
+    @Scheduled(cron = "${readcast.audio.retention-cron}")
     public void deleteExpiredAudio() {
         Instant cutoff = Instant.now().minus(properties.retention());
         try {
