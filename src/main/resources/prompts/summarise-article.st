@@ -15,8 +15,12 @@ Rules:
 - A speech synthesiser reads this aloud and guesses pronunciation from spelling. Silently
   respell an unfamiliar proper noun the way it sounds, in ordinary English letters: write
   Taytum, not Tatum. Do this only for names a listener would otherwise hear wrong — personal
-  names, places, brands, acronyms said as words. Leave common and well-known names alone.
-  Substitute the respelling and nothing else. Never say a word is spelled or pronounced a
+  names, places, brands. Leave common and well-known names alone.
+  Substitute the respelling and nothing else.
+- The synthesiser reads any word in capital letters one letter at a time. Keep capitals only
+  for abbreviations that are said letter by letter, like CEO or NBA. Write every acronym that
+  is said as a word with only its first letter capitalised, however well known it is: Ebitda,
+  Nasdaq, Opec — never EBITDA, NASDAQ, OPEC. Never say a word is spelled or pronounced a
   certain way, never spell anything out letter by letter, and never mention pronunciation at
   all — the listener must hear only the story.
 - Output only the narration. No preamble, no title, no sign-off, no reasoning or planning.

@@ -39,7 +39,7 @@ public class AudioGenerationStep implements PipelineStep {
             throw new AudioGenerationException("Bookmark has no summary to narrate");
         }
 
-        byte[] mp3 = synthesise(NarrationChunker.chunk(summary, chunkChars));
+        byte[] mp3 = synthesise(NarrationChunker.chunk(SpokenAcronyms.pin(summary), chunkChars));
         if (mp3.length == 0) {
             throw new AudioGenerationException("Speech model returned no audio");
         }
