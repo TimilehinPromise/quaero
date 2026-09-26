@@ -94,6 +94,10 @@ public class SummarizationService {
      * A model that overshot gets one explicit correction: the over-long text, its actual word
      * count, and the ceiling restated. Cheaper than resending the article, and the ask —
      * compress what you already wrote — is the same either way.
+     *
+     * <p>An empty reply keeps the draft rather than failing the step. The draft is a finished
+     * narration that only needs cutting, and the sentence-boundary cut after this does that;
+     * failing here threw it away and paid for the whole summary again on the retry.
      */
     private String tighten(String summary, SummaryTarget target) {
         String tightened = chatClientBuilder.build().prompt()
@@ -110,7 +114,8 @@ public class SummarizationService {
                 .content();
 
         if (tightened == null || tightened.isBlank()) {
-            throw new SummarizationException("Model returned an empty summary");
+            log.warn("Model returned an empty tightening; keeping the draft");
+            return summary;
         }
         return tightened.trim();
     }
