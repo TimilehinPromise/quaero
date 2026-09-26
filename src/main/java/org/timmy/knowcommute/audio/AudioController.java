@@ -1,5 +1,6 @@
 package org.timmy.knowcommute.audio;
 
+import java.time.Instant;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -21,6 +22,7 @@ public class AudioController {
 
     private final BookmarkRepository bookmarks;
     private final AudioStorage storage;
+    private final AudioProperties properties;
 
     /**
      * Redirects to a short-lived presigned URL rather than proxying the bytes, so playback
@@ -28,15 +30,30 @@ public class AudioController {
      */
     @GetMapping("/{bookmarkId}")
     public ResponseEntity<Void> stream(@CurrentUser DeviceUser user, @PathVariable UUID bookmarkId) {
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .location(storage.presignedUrl(audioKey(user, bookmarkId)))
+                .build();
+    }
+
+    /**
+     * The same presigned URL as a body, for a browser client: an {@code <audio>} element cannot
+     * send the device header, so the redirect above is unusable from one. The expiry is taken
+     * before signing, so it errs early rather than promising time the URL does not have.
+     */
+    @GetMapping("/{bookmarkId}/url")
+    public AudioUrl url(@CurrentUser DeviceUser user, @PathVariable UUID bookmarkId) {
+        String key = audioKey(user, bookmarkId);
+        Instant expiresAt = Instant.now().plus(properties.presignTtl());
+        return new AudioUrl(storage.presignedUrl(key), expiresAt);
+    }
+
+    private String audioKey(DeviceUser user, UUID bookmarkId) {
         Bookmark bookmark = bookmarks.findByIdAndUserIdAndDeletedAtIsNull(bookmarkId, user.getId())
                 .orElseThrow(() -> new BookmarkNotFoundException(bookmarkId));
 
         if (bookmark.getAudioStorageKey() == null) {
             throw new AudioNotReadyException(bookmark.getStatus().name());
         }
-
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .location(storage.presignedUrl(bookmark.getAudioStorageKey()))
-                .build();
+        return bookmark.getAudioStorageKey();
     }
 }

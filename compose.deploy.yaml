@@ -23,6 +23,9 @@ services:
       KOKORO_MAX_CONCURRENT: ${KOKORO_MAX_CONCURRENT:-2}
       READCAST_VOICE: ${READCAST_VOICE:-af_bella}
 
+      # The frontend's origin, e.g. https://app.example.com. Comma-separated for several.
+      READCAST_ALLOWED_ORIGINS: ${READCAST_ALLOWED_ORIGINS:-}
+
       # Hosted reader fallback for JS-rendered pages (the EMPTY route). Off unless opted in;
       # with READER_ENABLED=true and no key the app refuses to start, so a misconfiguration
       # fails at deploy time rather than on the first JS-only bookmark.
