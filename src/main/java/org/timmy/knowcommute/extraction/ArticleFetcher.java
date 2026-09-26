@@ -70,7 +70,7 @@ public class ArticleFetcher {
             }
             current = current.resolve(redirected.location());
         }
-        throw new ExtractionException("Exceeded " + properties.maxRedirects() + " redirects");
+        throw new ExtractionException("Exceeded " + properties.maxRedirects() + " redirects", false);
     }
 
     private Redirected attempt(URI url) {

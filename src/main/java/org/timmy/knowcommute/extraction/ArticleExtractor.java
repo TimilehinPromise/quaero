@@ -5,14 +5,10 @@ import static org.timmy.knowcommute.extraction.ArticleText.normalise;
 import static org.timmy.knowcommute.extraction.ArticleText.sha256;
 import static org.timmy.knowcommute.extraction.ArticleText.sourceDomain;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
-import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
@@ -51,7 +47,15 @@ public class ArticleExtractor implements DocumentExtractor {
 
     @Override
     public ExtractedArticle extract(FetchedPage page) {
-        Document document = parse(page);
+        return extract(page, properties.minimumWords());
+    }
+
+    /**
+     * The floor is a parameter, not always the configured minimum: {@link PageClassifier}
+     * routes genuinely short pages here with a lower one so they are read, not refused.
+     */
+    public ExtractedArticle extract(FetchedPage page, int minimumWords) {
+        Document document = HtmlParsing.parse(page);
         rejectIfChallengePage(document);
 
         Element content = selectContent(document);
@@ -59,29 +63,15 @@ public class ArticleExtractor implements DocumentExtractor {
 
         String text = normalise(content.text());
         int wordCount = countWords(text);
-        if (wordCount < properties.minimumWords()) {
+        if (wordCount < minimumWords) {
             throw new ExtractionException(
                     "Extracted only " + wordCount + " words, below the "
-                            + properties.minimumWords() + "-word minimum");
+                            + minimumWords + "-word minimum", false);
         }
 
         return new ExtractedArticle(
                 title(document), author(document), sourceDomain(page.finalUrl()),
                 text, wordCount, sha256(text));
-    }
-
-    /**
-     * The declared charset is a hint, not the answer. Jsoup re-reads it from the meta tag or
-     * the BOM when the header omits it or gets it wrong, which older sites regularly do.
-     */
-    private Document parse(FetchedPage page) {
-        Charset declared = page.contentType() == null ? null : page.contentType().getCharset();
-        try {
-            return Jsoup.parse(new ByteArrayInputStream(page.body()),
-                    declared == null ? null : declared.name(), page.finalUrl().toString());
-        } catch (IOException e) {
-            throw new ExtractionException("Could not read the page as HTML", e);
-        }
     }
 
     /**

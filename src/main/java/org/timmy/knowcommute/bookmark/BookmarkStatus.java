@@ -6,7 +6,8 @@ public enum BookmarkStatus {
     GENERATING_AUDIO,
     READY,
     FAILED,
-    /** The site refused a server-side fetch. Retrying will not help; the user can paste the text. */
+    /** A server-side fetch cannot reach the content — the site refused, or the page renders it
+     * with JavaScript. Retrying the same fetch will not help; the user can paste the text. */
     BLOCKED;
 
     public boolean isTerminal() {

@@ -138,7 +138,7 @@ public class Bookmark extends Auditable {
         this.nextAttemptAt = nextAttemptAt;
     }
 
-    /** Terminal without burning retries: a refused fetch will be refused again. */
+    /** Terminal without burning retries: a fetch that failed this way fails the same way again. */
     public void block(String reason) {
         this.lastError = reason;
         this.nextAttemptAt = null;

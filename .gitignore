@@ -32,5 +32,8 @@ target/
 ### Internal docs and decision log — local only
 docs/
 
+### Tests — local only, never committed
+src/test/
+
 ### macOS
 .DS_Store
