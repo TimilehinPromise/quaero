@@ -4,6 +4,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
@@ -73,7 +74,7 @@ public class SummarizationService {
     }
 
     private String generate(String title, String sourceDomain, String input, SummaryTarget target) {
-        String summary = chatClientBuilder.build().prompt()
+        ChatResponse response = chatClientBuilder.build().prompt()
                 .options(timeoutOption())
                 .user(spec -> spec.text(promptTemplate).params(Map.of(
                         "targetWords", String.valueOf(target.targetWords()),
@@ -82,8 +83,13 @@ public class SummarizationService {
                         "sourceDomain", sourceDomain == null ? "unknown" : sourceDomain,
                         "article", input)))
                 .call()
-                .content();
+                .chatResponse();
 
+        if (hitTokenLimit(response)) {
+            throw new SummarizationException(
+                    "Model hit the output token limit before finishing the summary");
+        }
+        String summary = textOf(response);
         if (summary == null || summary.isBlank()) {
             throw new SummarizationException("Model returned an empty summary");
         }
@@ -100,7 +106,7 @@ public class SummarizationService {
      * failing here threw it away and paid for the whole summary again on the retry.
      */
     private String tighten(String summary, SummaryTarget target) {
-        String tightened = chatClientBuilder.build().prompt()
+        ChatResponse response = chatClientBuilder.build().prompt()
                 .options(timeoutOption())
                 .user("""
                         This narration is %d words — over the %d-word ceiling.
@@ -111,13 +117,37 @@ public class SummarizationService {
                         headings or markdown, no preamble, output only the narration.
                         """.formatted(wordCount(summary), target.targetWords(), summary, target.targetWords()))
                 .call()
-                .content();
+                .chatResponse();
 
+        if (hitTokenLimit(response)) {
+            log.warn("Tightening hit the output token limit; keeping the draft");
+            return summary;
+        }
+        String tightened = textOf(response);
         if (tightened == null || tightened.isBlank()) {
             log.warn("Model returned an empty tightening; keeping the draft");
             return summary;
         }
         return tightened.trim();
+    }
+
+    /**
+     * A reasoning model spends output tokens thinking before it writes, and when the limit runs
+     * out mid-narration the reply still arrives as ordinary text — a summary that stops
+     * mid-sentence, or nothing at all. The finish reason is the only signal that it was cut off.
+     * LENGTH is the OpenAI-compatible name, MAX_TOKENS Anthropic's.
+     */
+    private static boolean hitTokenLimit(ChatResponse response) {
+        String finishReason = response == null || response.getResult() == null
+                ? null
+                : response.getResult().getMetadata().getFinishReason();
+        return "LENGTH".equalsIgnoreCase(finishReason) || "MAX_TOKENS".equalsIgnoreCase(finishReason);
+    }
+
+    private static String textOf(ChatResponse response) {
+        return response == null || response.getResult() == null
+                ? null
+                : response.getResult().getOutput().getText();
     }
 
     /**
