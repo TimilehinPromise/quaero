@@ -12,6 +12,9 @@ import org.timmy.knowcommute.bookmark.BookmarkNotFoundException;
 import org.timmy.knowcommute.bookmark.BookmarkNotRecoverableException;
 import org.timmy.knowcommute.bookmark.DuplicateBookmarkException;
 import org.timmy.knowcommute.bookmark.InvalidUrlException;
+import org.timmy.knowcommute.lens.ListenerProfileNotFoundException;
+import org.timmy.knowcommute.lens.ProfileCheckUnavailableException;
+import org.timmy.knowcommute.lens.ProfileRejectedException;
 import org.timmy.knowcommute.security.UnauthenticatedException;
 
 @RestControllerAdvice
@@ -51,6 +54,23 @@ public class ApiExceptionHandler {
     @ExceptionHandler(InvalidUrlException.class)
     public ProblemDetail onInvalidUrl(InvalidUrlException e) {
         return problem(HttpStatus.BAD_REQUEST, "invalid-url", "Invalid URL", e.getMessage());
+    }
+
+    @ExceptionHandler(ListenerProfileNotFoundException.class)
+    public ProblemDetail onProfileNotFound(ListenerProfileNotFoundException e) {
+        return problem(HttpStatus.NOT_FOUND, "listener-profile-not-found", "No listener profile", e.getMessage());
+    }
+
+    @ExceptionHandler(ProfileRejectedException.class)
+    public ProblemDetail onProfileRejected(ProfileRejectedException e) {
+        return problem(HttpStatus.UNPROCESSABLE_CONTENT, "listener-profile-rejected", "Profile not accepted",
+                e.getMessage());
+    }
+
+    @ExceptionHandler(ProfileCheckUnavailableException.class)
+    public ProblemDetail onProfileCheckUnavailable(ProfileCheckUnavailableException e) {
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "listener-profile-check-unavailable",
+                "Profile check unavailable", "The profile could not be checked right now; try again shortly");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
