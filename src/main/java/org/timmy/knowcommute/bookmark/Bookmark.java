@@ -89,6 +89,17 @@ public class Bookmark extends Auditable {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
+    /** Snapshot of the listener profile at creation; null for a plain summary. */
+    @Column(name = "lens_profile", columnDefinition = "text")
+    private String lensProfile;
+
+    @Column(name = "lens_profile_hash", length = 64)
+    private String lensProfileHash;
+
+    /** The brief that shaped the summary. Null when no lens was asked for, or its brief failed. */
+    @Column(name = "lens_brief", columnDefinition = "text")
+    private String lensBrief;
+
     private Bookmark(DeviceUser user, String url, SummaryLength summaryLength) {
         this.user = user;
         this.url = url;
@@ -111,8 +122,26 @@ public class Bookmark extends Auditable {
         advanceTo(BookmarkStatus.SUMMARIZING);
     }
 
+    public void useLens(String profile, String profileHash) {
+        this.lensProfile = profile;
+        this.lensProfileHash = profileHash;
+    }
+
+    public boolean wantsLens() {
+        return lensProfile != null;
+    }
+
+    public boolean isLensApplied() {
+        return lensBrief != null;
+    }
+
     public void applySummary(String summaryText) {
+        applySummary(summaryText, null);
+    }
+
+    public void applySummary(String summaryText, String lensBrief) {
         this.summaryText = summaryText;
+        this.lensBrief = lensBrief;
         advanceTo(BookmarkStatus.GENERATING_AUDIO);
     }
 

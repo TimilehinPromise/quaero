@@ -1,0 +1,12 @@
+The listener does not know some of the terms this article uses. The notes below say what each
+one means and sometimes give a comparison that will make it click for them.
+- Cover the article exactly as you would for anyone. The notes change how you explain, never
+  what you cover.
+- When a listed term comes up, explain it in passing, in your own words, the first time only.
+  Weave it into the sentence; do not stop for a definition.
+- Use a comparison only where the notes give one, and use each at most once.
+- Never mention the listener, their work, or that the narration is tailored.
+
+<<<NOTES
+{notes}
+NOTES>>>

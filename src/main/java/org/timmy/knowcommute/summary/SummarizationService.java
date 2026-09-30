@@ -20,16 +20,26 @@ public class SummarizationService {
     private final Resource promptTemplate;
 
     public String summarise(String title, String sourceDomain, String article, SummaryLength length) {
-        String input = truncateToBudget(article);
+        return summarise(title, sourceDomain, article, length, ListenerNotes.NONE);
+    }
+
+    /**
+     * The takeaway's words come out of the narration's budget, and it is appended only after
+     * tightening and truncation, which see the narration alone — so it is never the part cut.
+     */
+    public String summarise(String title, String sourceDomain, String article, SummaryLength length,
+                            ListenerNotes notes) {
+        String input = modelInput(article);
         int inputWords = wordCount(input);
 
-        SummaryTarget target = targetFor(length, inputWords);
-        if (target.targetWords() < length.targetWords()) {
+        SummaryTarget full = targetFor(length, inputWords);
+        if (full.targetWords() < length.targetWords()) {
             log.info("{} asks for {} words but the article is {} words; aiming for {}",
-                    length, length.targetWords(), inputWords, target.targetWords());
+                    length, length.targetWords(), inputWords, full.targetWords());
         }
+        SummaryTarget target = full.reserving(notes.takeawayWords());
 
-        String summary = generate(title, sourceDomain, input, target);
+        String summary = generate(title, sourceDomain, input, target, notes);
         if (exceedsCeiling(summary, target)) {
             log.warn("Summary ran {} words against the {}-word ceiling; asking the model to tighten it",
                     wordCount(summary), target.targetWords());
@@ -40,7 +50,7 @@ public class SummarizationService {
                     target.targetWords());
             summary = truncateAtSentenceBoundary(summary, target.targetWords());
         }
-        return summary.trim();
+        return notes.appendTo(summary.trim());
     }
 
     /**
@@ -73,7 +83,8 @@ public class SummarizationService {
         return Math.min(wordCount(article), properties.maxInputWords());
     }
 
-    private String generate(String title, String sourceDomain, String input, SummaryTarget target) {
+    private String generate(String title, String sourceDomain, String input, SummaryTarget target,
+                            ListenerNotes notes) {
         ChatResponse response = chatClientBuilder.build().prompt()
                 .options(timeoutOption())
                 .user(spec -> spec.text(promptTemplate).params(Map.of(
@@ -81,6 +92,7 @@ public class SummarizationService {
                         "paragraphs", String.valueOf(target.paragraphs()),
                         "title", title == null ? "Untitled" : title,
                         "sourceDomain", sourceDomain == null ? "unknown" : sourceDomain,
+                        "listenerNotes", notes.promptBlock(),
                         "article", input)))
                 .call()
                 .chatResponse();
@@ -189,10 +201,11 @@ public class SummarizationService {
     }
 
     /**
-     * Guards the context window on very long articles. Truncating and telling the user nothing
-     * beats failing the bookmark outright, but it is lossy, so it is logged.
+     * The article as the model will see it. Guards the context window on very long articles:
+     * truncating and telling the user nothing beats failing the bookmark outright, but it is
+     * lossy, so it is logged. The listener brief reads the same input the narration does.
      */
-    private String truncateToBudget(String article) {
+    String modelInput(String article) {
         String[] words = article.trim().split("\\s+");
         if (words.length <= properties.maxInputWords()) {
             return article;
