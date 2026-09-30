@@ -13,6 +13,8 @@ public record BookmarkListItem(
         SummaryLength summaryLength,
         Integer wordCount,
         Integer audioDurationSec,
+        boolean lensRequested,
+        boolean lensApplied,
         Instant createdAt,
         Instant processedAt) {
 
@@ -27,6 +29,8 @@ public record BookmarkListItem(
                 bookmark.getSummaryLength(),
                 bookmark.getWordCount(),
                 bookmark.getAudioDurationSec(),
+                bookmark.wantsLens(),
+                bookmark.isLensApplied(),
                 bookmark.getCreatedAt(),
                 bookmark.getProcessedAt());
     }

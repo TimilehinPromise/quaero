@@ -35,6 +35,10 @@ public class ListenerProfileService {
         this.generatorPrompt = read(generatorPrompt);
     }
 
+    public Optional<ListenerProfile> find(DeviceUser user) {
+        return profiles.findByUserId(user.getId());
+    }
+
     public ListenerProfileView get(DeviceUser user) {
         return profiles.findByUserId(user.getId())
                 .map(ListenerProfileView::from)

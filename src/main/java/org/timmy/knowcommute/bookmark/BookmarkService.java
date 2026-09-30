@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -12,6 +13,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.timmy.knowcommute.lens.ListenerProfile;
+import org.timmy.knowcommute.lens.ListenerProfileMissingException;
+import org.timmy.knowcommute.lens.ListenerProfileService;
 import org.timmy.knowcommute.user.DeviceUser;
 
 @Service
@@ -20,11 +24,13 @@ public class BookmarkService {
 
     private final BookmarkRepository bookmarks;
     private final UrlValidator urlValidator;
+    private final ListenerProfileService listenerProfiles;
 
     @Transactional
     public BookmarkDetail create(DeviceUser user, CreateBookmarkRequest request) {
         URI url = urlValidator.validate(request.url());
         Bookmark bookmark = Bookmark.pending(user, url.toString(), request.summaryLengthOrDefault());
+        applyLens(user, bookmark, request.useLens());
         try {
             return BookmarkDetail.from(bookmarks.saveAndFlush(bookmark));
         } catch (DataIntegrityViolationException e) {
@@ -86,6 +92,21 @@ public class BookmarkService {
     @Transactional
     public void delete(DeviceUser user, UUID id) {
         require(user, id).softDelete();
+    }
+
+    /** The profile is copied, not referenced, so editing it later never changes a bookmark in flight. */
+    private void applyLens(DeviceUser user, Bookmark bookmark, Boolean useLens) {
+        if (Boolean.FALSE.equals(useLens)) {
+            return;
+        }
+        Optional<ListenerProfile> profile = listenerProfiles.find(user);
+        if (profile.isEmpty()) {
+            if (Boolean.TRUE.equals(useLens)) {
+                throw new ListenerProfileMissingException();
+            }
+            return;
+        }
+        bookmark.useLens(profile.get().getProfileText(), profile.get().getProfileHash());
     }
 
     private Bookmark require(DeviceUser user, UUID id) {

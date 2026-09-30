@@ -12,6 +12,7 @@ import org.timmy.knowcommute.bookmark.BookmarkNotFoundException;
 import org.timmy.knowcommute.bookmark.BookmarkNotRecoverableException;
 import org.timmy.knowcommute.bookmark.DuplicateBookmarkException;
 import org.timmy.knowcommute.bookmark.InvalidUrlException;
+import org.timmy.knowcommute.lens.ListenerProfileMissingException;
 import org.timmy.knowcommute.lens.ListenerProfileNotFoundException;
 import org.timmy.knowcommute.lens.ProfileCheckUnavailableException;
 import org.timmy.knowcommute.lens.ProfileRejectedException;
@@ -59,6 +60,12 @@ public class ApiExceptionHandler {
     @ExceptionHandler(ListenerProfileNotFoundException.class)
     public ProblemDetail onProfileNotFound(ListenerProfileNotFoundException e) {
         return problem(HttpStatus.NOT_FOUND, "listener-profile-not-found", "No listener profile", e.getMessage());
+    }
+
+    @ExceptionHandler(ListenerProfileMissingException.class)
+    public ProblemDetail onProfileMissing(ListenerProfileMissingException e) {
+        return problem(HttpStatus.UNPROCESSABLE_CONTENT, "listener-profile-missing", "No listener profile",
+                e.getMessage());
     }
 
     @ExceptionHandler(ProfileRejectedException.class)

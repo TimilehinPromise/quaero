@@ -14,6 +14,8 @@ public record BookmarkDetail(
         String summaryText,
         Integer wordCount,
         Integer audioDurationSec,
+        boolean lensRequested,
+        boolean lensApplied,
         String lastError,
         Instant createdAt,
         Instant processedAt) {
@@ -30,6 +32,8 @@ public record BookmarkDetail(
                 bookmark.getSummaryText(),
                 bookmark.getWordCount(),
                 bookmark.getAudioDurationSec(),
+                bookmark.wantsLens(),
+                bookmark.isLensApplied(),
                 bookmark.getLastError(),
                 bookmark.getCreatedAt(),
                 bookmark.getProcessedAt());
