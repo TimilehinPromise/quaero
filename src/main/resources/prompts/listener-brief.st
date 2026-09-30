@@ -19,7 +19,8 @@ article is from their world, the more terms you list; an article squarely in the
 need none.
 - explain: what it means, in at most fifteen plain words, true to how the article uses it.
 - analogy: a comparison from the listener's own world that would make it click, or null.
-  Most terms get none; add one only where it truly makes the idea click, never to fill a slot.
+  At most two terms get one, and fewer is usual: add one only where it truly makes the idea
+  click, never to fill a slot.
   Give one only when the likeness is close and obvious; a loose comparison confuses more than
   it helps. It may illustrate the term, never add to it.
 

@@ -30,6 +30,12 @@ public class ListenerBriefService {
             "{\"terms\": [{\"term\": \"...\", \"explain\": \"...\", \"analogy\": \"...\" or null}], "
                     + "\"takeaway\": \"...\" or null}";
 
+    /**
+     * The prompt asks for at most two, and a model has ignored softer wording and given every
+     * term one. Terms arrive most important first, so the first two comparisons are the ones kept.
+     */
+    private static final int MAX_COMPARISONS = 2;
+
     private static final ObjectMapper JSON = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
@@ -66,9 +72,13 @@ public class ListenerBriefService {
         if (brief.terms().isEmpty()) {
             return new ListenerNotes("", takeaway);
         }
+        int[] comparisons = {0};
         String notes = brief.terms().stream()
-                .map(term -> "- " + term.term() + ": " + term.explain()
-                        + (term.analogy() == null || term.analogy().isBlank() ? "" : " Comparison: " + term.analogy()))
+                .map(term -> {
+                    boolean compare = term.analogy() != null && !term.analogy().isBlank()
+                            && comparisons[0]++ < MAX_COMPARISONS;
+                    return "- " + term.term() + ": " + term.explain() + (compare ? " Comparison: " + term.analogy() : "");
+                })
                 .collect(Collectors.joining("\n"));
         return new ListenerNotes(notesTemplate.replace("{notes}", notes) + "\n", takeaway);
     }
