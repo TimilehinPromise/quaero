@@ -1,5 +1,6 @@
 package org.timmy.knowcommute.summary;
 
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -14,6 +15,7 @@ import org.timmy.knowcommute.pipeline.PipelineStep;
 public class SummarizationStep implements PipelineStep {
 
     private final SummarizationService summarizationService;
+    private final ListenerBriefService briefs;
     private final BookmarkRepository bookmarks;
 
     @Override
@@ -28,32 +30,50 @@ public class SummarizationStep implements PipelineStep {
             throw new SummarizationException("Bookmark has no extracted text to summarise");
         }
 
-        bookmark.applySummary(reuseOrGenerate(bookmark, article));
+        Optional<Bookmark> reusable = findReusable(bookmark)
+                .filter(existing -> withinCeiling(existing, bookmark, article));
+        if (reusable.isPresent()) {
+            log.info("Reusing summary from bookmark {} for identical content", reusable.get().getId());
+            bookmark.applySummary(reusable.get().getSummaryText(), reusable.get().getLensBrief());
+            return;
+        }
+
+        ListenerBrief brief = bookmark.wantsLens() ? briefOrNull(bookmark, article) : null;
+        ListenerNotes notes = brief == null ? ListenerNotes.NONE : briefs.notesFor(brief);
+        String summary = summarizationService.summarise(bookmark.getTitle(), bookmark.getSourceDomain(), article,
+                bookmark.getSummaryLength(), notes);
+        bookmark.applySummary(summary, brief == null ? null : ListenerBriefService.toJson(brief));
     }
 
-    private String reuseOrGenerate(Bookmark bookmark, String article) {
-        return bookmarks.findFirstByContentHashAndSummaryLengthAndSummaryTextIsNotNull(
-                        bookmark.getContentHash(), bookmark.getSummaryLength())
-                .map(existing -> reuseWithinCeiling(existing, bookmark, article))
-                .orElseGet(() -> summarizationService.summarise(
-                        bookmark.getTitle(), bookmark.getSourceDomain(), article,
-                        bookmark.getSummaryLength()));
+    private Optional<Bookmark> findReusable(Bookmark bookmark) {
+        return bookmark.wantsLens()
+                ? bookmarks.findFirstByContentHashAndSummaryLengthAndLensProfileHashAndLensBriefIsNotNullAndSummaryTextIsNotNull(
+                        bookmark.getContentHash(), bookmark.getSummaryLength(), bookmark.getLensProfileHash())
+                : bookmarks.findFirstByContentHashAndSummaryLengthAndLensProfileHashIsNullAndSummaryTextIsNotNull(
+                        bookmark.getContentHash(), bookmark.getSummaryLength());
     }
 
     /**
      * Cached summaries may predate the current prompt and the ceiling gate, so a cache hit
      * gets the same check as a fresh summary; an over-long one is regenerated, not served.
      */
-    private String reuseWithinCeiling(Bookmark existing, Bookmark bookmark, String article) {
-        String cached = existing.getSummaryText();
-        if (summarizationService.exceedsCeiling(cached, bookmark.getSummaryLength(), article)) {
+    private boolean withinCeiling(Bookmark existing, Bookmark bookmark, String article) {
+        if (summarizationService.exceedsCeiling(existing.getSummaryText(), bookmark.getSummaryLength(), article)) {
             log.warn("Cached summary from bookmark {} is over the {} ceiling; regenerating",
                     existing.getId(), bookmark.getSummaryLength());
-            return summarizationService.summarise(
-                    bookmark.getTitle(), bookmark.getSourceDomain(), article,
-                    bookmark.getSummaryLength());
+            return false;
         }
-        log.info("Reusing summary from bookmark {} for identical content", existing.getId());
-        return cached;
+        return true;
+    }
+
+    /** A lens is an enhancement: when its brief cannot be had, the listener still gets a summary. */
+    private ListenerBrief briefOrNull(Bookmark bookmark, String article) {
+        try {
+            return briefs.brief(bookmark.getLensProfile(), bookmark.getTitle(), bookmark.getSourceDomain(), article);
+        } catch (RuntimeException e) {
+            log.warn("Listener brief failed for bookmark {}; summarising without the lens: {}",
+                    bookmark.getId(), e.getMessage());
+            return null;
+        }
     }
 }

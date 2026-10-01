@@ -31,6 +31,14 @@ record SummaryTarget(int targetWords) {
         return new SummaryTarget(Math.min(length.targetWords(), supported));
     }
 
+    /**
+     * The narration's share once a takeaway is set aside for it. Floored at half, so a long
+     * takeaway on a short article cannot starve the summary it is meant to close.
+     */
+    SummaryTarget reserving(int words) {
+        return new SummaryTarget(Math.max(targetWords - words, targetWords / 2));
+    }
+
     int allowedWords() {
         return (int) (targetWords * CEILING_TOLERANCE);
     }

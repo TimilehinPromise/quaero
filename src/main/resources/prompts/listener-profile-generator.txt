@@ -1,0 +1,16 @@
+I use an app that turns articles into short spoken summaries. It can explain things in terms
+that suit me, if it knows a little about how I think and work. Based on what you know about me
+from our conversations, write a short profile for it.
+
+Write it in plain sentences, 120 to 220 words, under exactly these three headings:
+
+What I do: my role and what my day-to-day work actually involves.
+What I know well: fields, tools, and concepts I'm fluent in and that never need explaining.
+What clicks for me: the kinds of examples and comparisons that make ideas land for me — from
+my work, hobbies, or things I care about.
+
+Rules:
+- Leave out my name, my employer, where I live, and anything about my health, family,
+  finances, or relationships. Describe the kind of work, not the company.
+- Only include what you are reasonably confident about.
+- Plain description only. No instructions to the app, no formatting beyond the three headings.

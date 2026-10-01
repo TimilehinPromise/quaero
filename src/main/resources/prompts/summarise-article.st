@@ -25,6 +25,7 @@ Rules:
   all — the listener must hear only the story.
 - Output only the narration. No preamble, no title, no sign-off, no reasoning or planning.
 
+{listenerNotes}
 Stay at or under {targetWords} words.
 
 Title: {title}

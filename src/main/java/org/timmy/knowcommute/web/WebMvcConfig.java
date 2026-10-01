@@ -34,7 +34,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
         }
         registry.addMapping("/api/**")
                 .allowedOrigins(webProperties.allowedOrigins().toArray(String[]::new))
-                .allowedMethods("GET", "POST", "DELETE")
+                .allowedMethods("GET", "POST", "PUT", "DELETE")
                 .allowedHeaders("X-Device-Id", "Content-Type")
                 .maxAge(Duration.ofHours(1).toSeconds());
     }

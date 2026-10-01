@@ -4,6 +4,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
@@ -19,16 +20,26 @@ public class SummarizationService {
     private final Resource promptTemplate;
 
     public String summarise(String title, String sourceDomain, String article, SummaryLength length) {
-        String input = truncateToBudget(article);
+        return summarise(title, sourceDomain, article, length, ListenerNotes.NONE);
+    }
+
+    /**
+     * The takeaway's words come out of the narration's budget, and it is appended only after
+     * tightening and truncation, which see the narration alone — so it is never the part cut.
+     */
+    public String summarise(String title, String sourceDomain, String article, SummaryLength length,
+                            ListenerNotes notes) {
+        String input = modelInput(article);
         int inputWords = wordCount(input);
 
-        SummaryTarget target = targetFor(length, inputWords);
-        if (target.targetWords() < length.targetWords()) {
+        SummaryTarget full = targetFor(length, inputWords);
+        if (full.targetWords() < length.targetWords()) {
             log.info("{} asks for {} words but the article is {} words; aiming for {}",
-                    length, length.targetWords(), inputWords, target.targetWords());
+                    length, length.targetWords(), inputWords, full.targetWords());
         }
+        SummaryTarget target = full.reserving(notes.takeawayWords());
 
-        String summary = generate(title, sourceDomain, input, target);
+        String summary = generate(title, sourceDomain, input, target, notes);
         if (exceedsCeiling(summary, target)) {
             log.warn("Summary ran {} words against the {}-word ceiling; asking the model to tighten it",
                     wordCount(summary), target.targetWords());
@@ -39,7 +50,7 @@ public class SummarizationService {
                     target.targetWords());
             summary = truncateAtSentenceBoundary(summary, target.targetWords());
         }
-        return summary.trim();
+        return notes.appendTo(summary.trim());
     }
 
     /**
@@ -72,18 +83,25 @@ public class SummarizationService {
         return Math.min(wordCount(article), properties.maxInputWords());
     }
 
-    private String generate(String title, String sourceDomain, String input, SummaryTarget target) {
-        String summary = chatClientBuilder.build().prompt()
+    private String generate(String title, String sourceDomain, String input, SummaryTarget target,
+                            ListenerNotes notes) {
+        ChatResponse response = chatClientBuilder.build().prompt()
                 .options(timeoutOption())
                 .user(spec -> spec.text(promptTemplate).params(Map.of(
                         "targetWords", String.valueOf(target.targetWords()),
                         "paragraphs", String.valueOf(target.paragraphs()),
                         "title", title == null ? "Untitled" : title,
                         "sourceDomain", sourceDomain == null ? "unknown" : sourceDomain,
+                        "listenerNotes", notes.promptBlock(),
                         "article", input)))
                 .call()
-                .content();
+                .chatResponse();
 
+        if (hitTokenLimit(response)) {
+            throw new SummarizationException(
+                    "Model hit the output token limit before finishing the summary");
+        }
+        String summary = textOf(response);
         if (summary == null || summary.isBlank()) {
             throw new SummarizationException("Model returned an empty summary");
         }
@@ -100,7 +118,7 @@ public class SummarizationService {
      * failing here threw it away and paid for the whole summary again on the retry.
      */
     private String tighten(String summary, SummaryTarget target) {
-        String tightened = chatClientBuilder.build().prompt()
+        ChatResponse response = chatClientBuilder.build().prompt()
                 .options(timeoutOption())
                 .user("""
                         This narration is %d words — over the %d-word ceiling.
@@ -111,13 +129,37 @@ public class SummarizationService {
                         headings or markdown, no preamble, output only the narration.
                         """.formatted(wordCount(summary), target.targetWords(), summary, target.targetWords()))
                 .call()
-                .content();
+                .chatResponse();
 
+        if (hitTokenLimit(response)) {
+            log.warn("Tightening hit the output token limit; keeping the draft");
+            return summary;
+        }
+        String tightened = textOf(response);
         if (tightened == null || tightened.isBlank()) {
             log.warn("Model returned an empty tightening; keeping the draft");
             return summary;
         }
         return tightened.trim();
+    }
+
+    /**
+     * A reasoning model spends output tokens thinking before it writes, and when the limit runs
+     * out mid-narration the reply still arrives as ordinary text — a summary that stops
+     * mid-sentence, or nothing at all. The finish reason is the only signal that it was cut off.
+     * LENGTH is the OpenAI-compatible name, MAX_TOKENS Anthropic's.
+     */
+    private static boolean hitTokenLimit(ChatResponse response) {
+        String finishReason = response == null || response.getResult() == null
+                ? null
+                : response.getResult().getMetadata().getFinishReason();
+        return "LENGTH".equalsIgnoreCase(finishReason) || "MAX_TOKENS".equalsIgnoreCase(finishReason);
+    }
+
+    private static String textOf(ChatResponse response) {
+        return response == null || response.getResult() == null
+                ? null
+                : response.getResult().getOutput().getText();
     }
 
     /**
@@ -159,10 +201,11 @@ public class SummarizationService {
     }
 
     /**
-     * Guards the context window on very long articles. Truncating and telling the user nothing
-     * beats failing the bookmark outright, but it is lossy, so it is logged.
+     * The article as the model will see it. Guards the context window on very long articles:
+     * truncating and telling the user nothing beats failing the bookmark outright, but it is
+     * lossy, so it is logged. The listener brief reads the same input the narration does.
      */
-    private String truncateToBudget(String article) {
+    String modelInput(String article) {
         String[] words = article.trim().split("\\s+");
         if (words.length <= properties.maxInputWords()) {
             return article;
