@@ -69,7 +69,7 @@
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-starter-model-anthropic</artifactId>
 		</dependency>
-		<!-- Speech only. Points at a self-hosted Kokoro, which speaks the OpenAI audio API. -->
+		<!-- OpenAI-compatible chat; Kokoro captions use a small HTTP client behind CaptionedSpeechModel. -->
 		<dependency>
 			<groupId>org.springframework.ai</groupId>
 			<artifactId>spring-ai-starter-model-openai</artifactId>

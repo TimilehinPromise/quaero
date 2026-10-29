@@ -3,6 +3,7 @@ package org.timmy.knowcommute.audio;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -103,15 +104,40 @@ public class R2AudioStorage implements AudioStorage {
 
     @Override
     public String store(String key, byte[] mp3) {
+        put(key, mp3, "audio/mpeg");
+        return key;
+    }
+
+    @Override
+    public void storeTimestamps(String audioKey, byte[] json) {
+        put(AudioStorage.timestampsKey(audioKey), json, "application/json");
+    }
+
+    private void put(String key, byte[] content, String contentType) {
         try {
             client().putObject(PutObjectRequest.builder()
                     .bucket(properties.bucket())
                     .key(key)
-                    .contentType("audio/mpeg")
-                    .build(), RequestBody.fromBytes(mp3));
-            return key;
+                    .contentType(contentType)
+                    .build(), RequestBody.fromBytes(content));
         } catch (S3Exception e) {
-            throw new AudioStorageException("Could not store audio at " + key, e);
+            throw new AudioStorageException("Could not store audio artifact at " + key, e);
+        }
+    }
+
+    @Override
+    public Optional<byte[]> readTimestamps(String audioKey) {
+        String key = AudioStorage.timestampsKey(audioKey);
+        try (var response = client().getObject(GetObjectRequest.builder()
+                .bucket(properties.bucket()).key(key).build())) {
+            return Optional.of(response.readAllBytes());
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                return Optional.empty();
+            }
+            throw new AudioStorageException("Could not read word timestamps at " + key, e);
+        } catch (java.io.IOException e) {
+            throw new AudioStorageException("Could not read word timestamps at " + key, e);
         }
     }
 
@@ -126,18 +152,24 @@ public class R2AudioStorage implements AudioStorage {
     }
 
     @Override
-    public void delete(String key) {
+    public void deleteNarration(String audioKey) {
+        delete(audioKey);
+        delete(AudioStorage.timestampsKey(audioKey));
+    }
+
+    private void delete(String key) {
         client().deleteObject(DeleteObjectRequest.builder()
                 .bucket(properties.bucket()).key(key).build());
     }
 
     @Override
-    public List<String> keysOlderThan(Instant cutoff) {
+    public List<String> audioKeysOlderThan(Instant cutoff) {
         return client().listObjectsV2Paginator(ListObjectsV2Request.builder()
                         .bucket(properties.bucket()).build())
                 .contents().stream()
                 .filter(object -> object.lastModified().isBefore(cutoff))
                 .map(object -> object.key())
+                .filter(key -> key.endsWith(".mp3"))
                 .toList();
     }
 }
