@@ -8,9 +8,12 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 final class KokoroCaptionedSpeechModel implements CaptionedSpeechModel {
 
     private final TtsProperties properties;
@@ -66,28 +69,33 @@ final class KokoroCaptionedSpeechModel implements CaptionedSpeechModel {
         if (response.timestamps() == null) {
             throw new AudioGenerationException("Kokoro returned no word timestamps");
         }
-        if (response.timestamps().stream().anyMatch(caption -> caption == null || caption.word() == null)) {
-            throw new AudioGenerationException("Kokoro returned invalid word timestamps");
-        }
 
         byte[] audio = Base64.getDecoder().decode(response.audio());
-        List<SpeechCaption> captions = response.timestamps().stream()
-                .map(caption -> new SpeechCaption(caption.word(), caption.startTime(), caption.endTime()))
-                .toList();
-        validate(captions);
-        return new CaptionedSpeech(audio, captions);
+        List<SpeechCaption> captions = new ArrayList<>(response.timestamps().size());
+        double previousStart = 0;
+        int rejected = 0;
+        for (KokoroTimestamp caption : response.timestamps()) {
+            if (!usable(caption) || caption.startTime() < previousStart) {
+                rejected++;
+                continue;
+            }
+            captions.add(new SpeechCaption(caption.word(), caption.startTime(), caption.endTime()));
+            previousStart = caption.startTime();
+        }
+        if (captions.isEmpty()) {
+            throw new AudioGenerationException("Kokoro returned no usable word timestamps");
+        }
+        if (rejected > 0) {
+            log.warn("Skipped {} of {} unusable Kokoro word timestamps", rejected, response.timestamps().size());
+        }
+        return new CaptionedSpeech(audio, List.copyOf(captions));
     }
 
-    private void validate(List<SpeechCaption> captions) {
-        double previousStart = 0;
-        for (SpeechCaption caption : captions) {
-            if (!Double.isFinite(caption.start()) || !Double.isFinite(caption.end())
-                    || caption.start() < 0 || caption.end() < caption.start()
-                    || caption.start() < previousStart) {
-                throw new AudioGenerationException("Kokoro returned invalid word timestamps");
-            }
-            previousStart = caption.start();
-        }
+    private boolean usable(KokoroTimestamp caption) {
+        return caption != null && caption.word() != null
+                && caption.startTime() != null && caption.endTime() != null
+                && Double.isFinite(caption.startTime()) && Double.isFinite(caption.endTime())
+                && caption.startTime() >= 0 && caption.endTime() >= caption.startTime();
     }
 
     private static String captionedSpeechUrl(String baseUrl) {
@@ -115,7 +123,7 @@ final class KokoroCaptionedSpeechModel implements CaptionedSpeechModel {
                                   List<KokoroTimestamp> timestamps) {
     }
 
-    private record KokoroTimestamp(String word, @JsonProperty("start_time") double startTime,
-                                   @JsonProperty("end_time") double endTime) {
+    private record KokoroTimestamp(String word, @JsonProperty("start_time") Double startTime,
+                                   @JsonProperty("end_time") Double endTime) {
     }
 }
