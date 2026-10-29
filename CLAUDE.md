@@ -40,8 +40,9 @@ Full rules in `docs/CODING_STANDARDS.md`. The ones most often violated:
   otherwise; see `docs/devlog/0001-2026-08-22-foundations-and-stack-decisions.md`.
 - **The backend fetches arbitrary user-supplied URLs.** SSRF validation (scheme allowlist,
   private/loopback/link-local IP rejection) is a required control, re-run on every redirect.
-- **LLM and TTS go through Spring AI interfaces** (`ChatClient`, `TextToSpeechModel`) so
-  providers swap by config. Do not call a provider SDK directly.
+- **LLM goes through Spring AI** (`ChatClient`) so providers swap by config. Kokoro word captions
+  need its `/dev/captioned_speech` route, isolated behind `CaptionedSpeechModel` because Spring AI's
+  `TextToSpeechModel` returns only bytes. Do not call a provider SDK directly.
 
 ## Devlog
 

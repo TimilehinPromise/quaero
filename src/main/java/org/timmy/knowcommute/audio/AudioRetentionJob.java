@@ -20,8 +20,8 @@ public class AudioRetentionJob {
     public void deleteExpiredAudio() {
         Instant cutoff = Instant.now().minus(properties.retention());
         try {
-            var expired = storage.keysOlderThan(cutoff);
-            expired.forEach(storage::delete);
+            var expired = storage.audioKeysOlderThan(cutoff);
+            expired.forEach(storage::deleteNarration);
             if (!expired.isEmpty()) {
                 log.info("Deleted {} audio object(s) older than {}", expired.size(), cutoff);
             }

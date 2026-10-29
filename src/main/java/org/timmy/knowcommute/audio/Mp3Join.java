@@ -26,11 +26,17 @@ final class Mp3Join {
     }
 
     static byte[] join(List<byte[]> parts) {
+        return joinWithDurations(parts).bytes();
+    }
+
+    static Joined joinWithDurations(List<byte[]> parts) {
         if (parts.size() == 1) {
-            return parts.getFirst();
+            byte[] only = parts.getFirst();
+            return new Joined(only, List.of(Mp3Duration.exactSeconds(only)));
         }
 
         var joined = new ByteArrayOutputStream();
+        var durations = new java.util.ArrayList<Double>(parts.size());
         Mp3FrameHeader format = null;
         for (byte[] part : parts) {
             int start = firstAudioFrame(part);
@@ -46,8 +52,12 @@ final class Mp3Join {
                         "Speech model changed audio format mid-narration; parts cannot be joined");
             }
             joined.write(part, start, end - start);
+            durations.add(Mp3Duration.exactSeconds(part, start, end));
         }
-        return joined.toByteArray();
+        return new Joined(joined.toByteArray(), List.copyOf(durations));
+    }
+
+    record Joined(byte[] bytes, List<Double> partDurations) {
     }
 
     /**

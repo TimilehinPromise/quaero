@@ -1,9 +1,12 @@
 package org.timmy.knowcommute.audio;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -45,6 +48,16 @@ public class AudioController {
         String key = audioKey(user, bookmarkId);
         Instant expiresAt = Instant.now().plus(properties.presignTtl());
         return new AudioUrl(storage.presignedUrl(key), expiresAt);
+    }
+
+    @GetMapping(value = "/{bookmarkId}/timestamps", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<byte[]> timestamps(@CurrentUser DeviceUser user, @PathVariable UUID bookmarkId) {
+        byte[] timings = storage.readTimestamps(audioKey(user, bookmarkId))
+                .orElseThrow(WordTimingsNotAvailableException::new);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .cacheControl(CacheControl.maxAge(Duration.ofDays(365)).cachePrivate().immutable())
+                .body(timings);
     }
 
     private String audioKey(DeviceUser user, UUID bookmarkId) {

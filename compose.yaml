@@ -14,9 +14,9 @@ services:
       retries: 10
 
   kokoro:
-    # Speaks the OpenAI audio API, so Spring AI's OpenAI starter drives it unchanged.
-    # CPU image: synthesis takes minutes per article, which is why the pipeline lease is 20m.
-    image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
+    # The caption endpoint is a /dev API; pin the release whose response contract we consume.
+    # CPU image: synthesis takes minutes per article, which is why the pipeline lease is 45m.
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.9.1
     ports:
       - "8880:8880"
     healthcheck:

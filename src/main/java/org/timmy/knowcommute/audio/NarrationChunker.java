@@ -29,6 +29,29 @@ final class NarrationChunker {
     private NarrationChunker() {
     }
 
+    static List<NarrationChunk> chunkWithOffsets(String narration, int maxChars) {
+        List<NarrationChunk> result = new ArrayList<>();
+        int searchFrom = 0;
+        for (String chunk : chunk(narration, maxChars)) {
+            String[] tokens = chunk.split("\\s+");
+            int start = narration.indexOf(tokens[0], searchFrom);
+            if (start < 0) {
+                throw new AudioGenerationException("Could not map a narration chunk to the transcript");
+            }
+            int end = start;
+            for (String token : tokens) {
+                int tokenStart = narration.indexOf(token, end);
+                if (tokenStart < 0) {
+                    throw new AudioGenerationException("Could not map a narration chunk to the transcript");
+                }
+                end = tokenStart + token.length();
+            }
+            result.add(new NarrationChunk(chunk, start, end));
+            searchFrom = end;
+        }
+        return List.copyOf(result);
+    }
+
     static List<String> chunk(String narration, int maxChars) {
         List<String> chunks = new ArrayList<>();
         StringBuilder current = new StringBuilder();
