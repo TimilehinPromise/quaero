@@ -122,6 +122,10 @@ public class Bookmark extends Auditable {
         advanceTo(BookmarkStatus.SUMMARIZING);
     }
 
+    public void useSummaryInputHash(String contentHash) {
+        this.contentHash = contentHash;
+    }
+
     public void useLens(String profile, String profileHash) {
         this.lensProfile = profile;
         this.lensProfileHash = profileHash;

@@ -1,7 +1,6 @@
 package org.timmy.knowcommute.extraction;
 
 import static org.timmy.knowcommute.extraction.ArticleText.countWords;
-import static org.timmy.knowcommute.extraction.ArticleText.normalise;
 import static org.timmy.knowcommute.extraction.ArticleText.sha256;
 import static org.timmy.knowcommute.extraction.ArticleText.sourceDomain;
 
@@ -15,6 +14,8 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.timmy.knowcommute.bookmark.Bookmark;
 import org.timmy.knowcommute.bookmark.BookmarkStatus;
+import org.timmy.knowcommute.figure.FigureProperties;
+import org.timmy.knowcommute.figure.FigureStore;
 import org.timmy.knowcommute.pipeline.PipelineStep;
 
 @Slf4j
@@ -25,6 +26,8 @@ public class ExtractionStep implements PipelineStep {
     private final List<DocumentExtractor> extractors;
     private final PageClassifier classifier;
     private final ExtractionProperties extractionProperties;
+    private final FigureProperties figureProperties;
+    private final FigureStore figureStore;
 
     /** Null when readcast.reader.enabled=false; EMPTY pages then degrade straight to the brief. */
     private final PageReader reader;
@@ -32,19 +35,22 @@ public class ExtractionStep implements PipelineStep {
     @Autowired
     public ExtractionStep(ArticleFetcher fetcher, List<DocumentExtractor> extractors,
                           PageClassifier classifier, ExtractionProperties extractionProperties,
+                          FigureProperties figureProperties, FigureStore figureStore,
                           ReaderProperties readerProperties, ObjectProvider<PageReader> readers) {
-        this(fetcher, extractors, classifier, extractionProperties,
+        this(fetcher, extractors, classifier, extractionProperties, figureProperties, figureStore,
                 resolveReader(readerProperties, readers));
     }
 
     /** Test constructor with the reader supplied directly; null disables the fallback. */
     ExtractionStep(ArticleFetcher fetcher, List<DocumentExtractor> extractors,
                    PageClassifier classifier, ExtractionProperties extractionProperties,
-                   PageReader reader) {
+                   FigureProperties figureProperties, FigureStore figureStore, PageReader reader) {
         this.fetcher = fetcher;
         this.extractors = extractors;
         this.classifier = classifier;
         this.extractionProperties = extractionProperties;
+        this.figureProperties = figureProperties;
+        this.figureStore = figureStore;
         this.reader = reader;
     }
 
@@ -75,6 +81,7 @@ public class ExtractionStep implements PipelineStep {
                 : extractor.extract(page);
         bookmark.applyExtraction(article.title(), article.author(), article.sourceDomain(), article.text(),
                 article.wordCount(), article.contentHash());
+        figureStore.replace(bookmark, article.figures());
     }
 
     /**
@@ -86,9 +93,28 @@ public class ExtractionStep implements PipelineStep {
     private ExtractedArticle extractHtml(ArticleExtractor extractor, FetchedPage page) {
         PageClassification classification = classifier.classify(page);
         return switch (classification.kind()) {
-            case ARTICLE, THIN -> extractor.extract(page, classification.minimumWords());
+            case ARTICLE, THIN -> extractOrDegrade(extractor, page, classification);
             case EMPTY -> emptyPage(extractor, page, classification);
         };
+    }
+
+    /**
+     * A page can classify as readable on body words yet extract below its floor: navigation
+     * and footer chrome push the body count up while the content root of a client-rendered
+     * shell holds a dozen words. Rather than fail the bookmark, render it — the hosted reader
+     * sees the JavaScript the plain fetch cannot run — and degrade to the metadata brief when
+     * rendering is unavailable.
+     */
+    private ExtractedArticle extractOrDegrade(ArticleExtractor extractor, FetchedPage page,
+                                              PageClassification classification) {
+        try {
+            return extractor.extract(page, classification.minimumWords());
+        } catch (ExtractionException failure) {
+            if (failure.isRetryable()) {
+                throw failure;
+            }
+            return emptyPage(extractor, page, classifier.degraded(page));
+        }
     }
 
     /**
@@ -113,7 +139,7 @@ public class ExtractionStep implements PipelineStep {
         return metadataBrief(page, classification);
     }
 
-    /** Reader HTML re-enters the normal pipeline; reader text is used as-is at the thin floor. */
+    /** Reader HTML re-enters the normal pipeline; Markdown receives the same figure markup rules. */
     private ExtractedArticle fromRendered(ArticleExtractor extractor, FetchedPage page,
                                           PageClassification classification, RenderedPage rendered) {
         if (rendered.html() != null) {
@@ -125,14 +151,14 @@ public class ExtractionStep implements PipelineStep {
             }
             return null;
         }
-        String text = normalise(rendered.text());
-        int wordCount = countWords(text);
-        if (wordCount < extractionProperties.thinMinimumWords()) {
+        String title = rendered.title() != null ? rendered.title() : classification.briefTitle();
+        FigureMarkup.Result figures = FigureMarkup.markdown(
+                rendered.text(), page.finalUrl(), title, figureProperties);
+        if (figures.wordCount() < extractionProperties.thinMinimumWords()) {
             return null;
         }
-        String title = rendered.title() != null ? rendered.title() : classification.briefTitle();
         return new ExtractedArticle(title, null, sourceDomain(page.finalUrl()),
-                text, wordCount, sha256(text));
+                figures.text(), figures.wordCount(), sha256(figures.text()), figures.figures());
     }
 
     /**

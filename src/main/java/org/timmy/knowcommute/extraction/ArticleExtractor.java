@@ -5,6 +5,7 @@ import static org.timmy.knowcommute.extraction.ArticleText.normalise;
 import static org.timmy.knowcommute.extraction.ArticleText.sha256;
 import static org.timmy.knowcommute.extraction.ArticleText.sourceDomain;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -14,6 +15,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.timmy.knowcommute.figure.FigureProperties;
 
 @Component
 @RequiredArgsConstructor
@@ -25,7 +27,25 @@ public class ArticleExtractor implements DocumentExtractor {
 
     private static final String CHROME_SELECTOR =
             "script, style, noscript, nav, aside, footer, header, form, iframe, svg,"
-                    + " .advertisement, .ad, .share, .related, .comments, .newsletter";
+                    + " .advertisement, .ad, .share, .related, .comments, .newsletter,"
+                    + " [class*=related], [id*=related], [class*=recommended], [id*=recommended],"
+                    + " [class*=read-next], [class*=more-like], [class*=sponsored],"
+                    + " [data-testid*=related], [data-testid*=recommended]";
+
+    /**
+     * Section labels that mark recommendation rails. Matched against an element's own text, not
+     * its subtree, so prose that merely mentions "related articles" is never pruned.
+     */
+    private static final java.util.regex.Pattern RELATED_HEADING =
+            java.util.regex.Pattern.compile("related (articles|posts|stories|news)|"
+                    + "you may also (like|enjoy)|you might also like|"
+                    + "recommended (for you|reading|articles?)|suggested (reading|articles?)|"
+                    + "more from .+|read next|what to read next|sponsored content|partner content");
+
+    private static final int MAX_HEADING_LABEL_CHARS = 40;
+
+    /** A related-content section bigger than half the article is the article; never remove it. */
+    private static final double MAX_PRUNE_FRACTION = 0.5;
 
     private static final List<String> CHALLENGE_MARKERS = List.of(
             "just a moment", "checking your browser", "enable javascript and cookies",
@@ -39,6 +59,7 @@ public class ArticleExtractor implements DocumentExtractor {
             java.util.regex.Pattern.compile("^.*\\(@\\w+\\) on X$|^.* on X: .*$");
 
     private final ExtractionProperties properties;
+    private final FigureProperties figureProperties;
 
     @Override
     public Set<MediaType> supportedTypes() {
@@ -60,18 +81,18 @@ public class ArticleExtractor implements DocumentExtractor {
 
         Element content = selectContent(document);
         content.select(CHROME_SELECTOR).remove();
+        pruneRelatedSections(content);
 
-        String text = normalise(content.text());
-        int wordCount = countWords(text);
-        if (wordCount < minimumWords) {
+        String articleTitle = title(document);
+        FigureMarkup.Result figures = FigureMarkup.html(content, articleTitle, figureProperties);
+        if (figures.wordCount() < minimumWords) {
             throw new ExtractionException(
-                    "Extracted only " + wordCount + " words, below the "
+                    "Extracted only " + figures.wordCount() + " words, below the "
                             + minimumWords + "-word minimum", false);
         }
 
-        return new ExtractedArticle(
-                title(document), author(document), sourceDomain(page.finalUrl()),
-                text, wordCount, sha256(text));
+        return new ExtractedArticle(articleTitle, author(document), sourceDomain(page.finalUrl()),
+                figures.text(), figures.wordCount(), sha256(figures.text()), figures.figures());
     }
 
     /**
@@ -95,6 +116,34 @@ public class ArticleExtractor implements DocumentExtractor {
             }
         }
         return densestBlock(document);
+    }
+
+    /**
+     * Recommendation rails ("Related Articles" cards and the like) often live inside the chosen
+     * content root, past the end of the real article. They survive the chrome pass because their
+     * classes are hashed or unmarked, and their images then pollute figure selection. The rail is
+     * almost always introduced by a short standalone heading, so that label is the reliable
+     * handle: find it, then remove the section or region that contains it.
+     */
+    private void pruneRelatedSections(Element content) {
+        int contentWords = countWords(content.text());
+        List<Element> removals = new ArrayList<>();
+        for (Element element : content.getAllElements()) {
+            if (element == content) {
+                continue;
+            }
+            String label = normalise(element.ownText());
+            if (label == null || label.length() > MAX_HEADING_LABEL_CHARS
+                    || !RELATED_HEADING.matcher(label.toLowerCase(Locale.ROOT)).matches()) {
+                continue;
+            }
+            Element target = element.closest("section, [role=region]");
+            if (target != null && target != content && !removals.contains(target)
+                    && countWords(target.text()) <= contentWords * MAX_PRUNE_FRACTION) {
+                removals.add(target);
+            }
+        }
+        removals.forEach(Element::remove);
     }
 
     /**

@@ -1,0 +1,76 @@
+databaseChangeLog:
+  - changeSet:
+      id: 008-create-bookmark-figures
+      author: timmy
+      changes:
+        - createTable:
+            tableName: bookmark_figures
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_bookmark_figures
+              - column:
+                  name: bookmark_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_bookmark_figures_bookmark
+                    references: bookmarks(id)
+                    deleteCascade: true
+              - column:
+                  name: ordinal
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+              - column:
+                  name: image_url
+                  type: TEXT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: alt_text
+                  type: TEXT
+              - column:
+                  name: caption
+                  type: TEXT
+              - column:
+                  name: preceding_paragraph
+                  type: TEXT
+              - column:
+                  name: following_paragraph
+                  type: TEXT
+        - addUniqueConstraint:
+            tableName: bookmark_figures
+            columnNames: bookmark_id, ordinal
+            constraintName: ux_bookmark_figures_ordinal
+      rollback:
+        - dropTable:
+            tableName: bookmark_figures
+
+  - changeSet:
+      id: 008-create-figure-descriptions
+      author: timmy
+      changes:
+        - createTable:
+            tableName: figure_descriptions
+            columns:
+              - column:
+                  name: image_hash
+                  type: VARCHAR(64)
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_figure_descriptions
+              - column:
+                  name: knowledge
+                  type: TEXT
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropTable:
+            tableName: figure_descriptions
