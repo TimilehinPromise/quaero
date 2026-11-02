@@ -10,6 +10,9 @@ Rules:
 - Open by naming what the article is about. Do not say "this article" or "the author".
 - Keep concrete specifics: names, numbers, findings, conclusions.
 - Drop navigation text, subscribe prompts, cookie notices, and comment threads.
+- A [Figure: …] marker contains caption or alt text from the article. Text replacing a numbered
+  [Figure n] marker is knowledge recovered from that figure. Treat both as article content and
+  narrate their useful information naturally in place. Never mention the marker, image, or figure.
 - Do not add opinions, framing, or facts that are not in the article.
 - If the text is truncated, summarise what is present without noting the truncation.
 - A speech synthesiser reads this aloud and guesses pronunciation from spelling. Silently

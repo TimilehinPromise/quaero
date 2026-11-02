@@ -47,6 +47,18 @@ public class PageClassifier {
                 briefTitle(document), briefText(document));
     }
 
+    /**
+     * An EMPTY-flavoured classification for a page already known to be unreadable directly —
+     * the brief fields are filled in whatever the body's word count says. Used when extraction
+     * of a page that classified as readable still comes out below its floor: the mismatch
+     * between body words and content-root words that client-rendered shells produce.
+     */
+    public PageClassification degraded(FetchedPage page) {
+        Document document = HtmlParsing.parse(page);
+        return new PageClassification(PageKind.EMPTY, countWords(visibleText(document)), 0,
+                isAppShell(document), briefTitle(document), briefText(document));
+    }
+
     /** Prose a reader would see: everything except scripts, styles and embedded chrome. */
     private String visibleText(Document document) {
         Element body = document.body();

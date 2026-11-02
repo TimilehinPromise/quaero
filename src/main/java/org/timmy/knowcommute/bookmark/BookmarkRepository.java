@@ -18,10 +18,11 @@ public interface BookmarkRepository extends JpaRepository<Bookmark, UUID> {
     boolean existsByUserIdAndUrlAndDeletedAtIsNull(UUID userId, String url);
 
     /**
-     * Finds an existing plain summary for identical article text at the same length. Article
-     * text is public content, so reusing across users is safe and is the main defence against
-     * paying twice for the same article. A bookmark that asked for a lens is never a candidate,
-     * even one whose brief failed and fell back to plain.
+     * Finds an existing plain summary for identical summariser input at the same length. The
+     * input includes any figure knowledge recovered before this lookup. Article text is public
+     * content, so reusing across users is safe and is the main defence against paying twice for
+     * the same article. A bookmark that asked for a lens is never a candidate, even one whose
+     * brief failed and fell back to plain.
      */
     Optional<Bookmark> findFirstByContentHashAndSummaryLengthAndLensProfileHashIsNullAndSummaryTextIsNotNull(
             String contentHash, SummaryLength summaryLength);

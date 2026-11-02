@@ -7,6 +7,9 @@ import org.springframework.stereotype.Component;
 import org.timmy.knowcommute.bookmark.Bookmark;
 import org.timmy.knowcommute.bookmark.BookmarkRepository;
 import org.timmy.knowcommute.bookmark.BookmarkStatus;
+import org.timmy.knowcommute.figure.EnrichedArticle;
+import org.timmy.knowcommute.figure.FigureDebugService;
+import org.timmy.knowcommute.figure.FigureEnricher;
 import org.timmy.knowcommute.pipeline.PipelineStep;
 
 @Slf4j
@@ -17,6 +20,8 @@ public class SummarizationStep implements PipelineStep {
     private final SummarizationService summarizationService;
     private final ListenerBriefService briefs;
     private final BookmarkRepository bookmarks;
+    private final FigureEnricher figures;
+    private final FigureDebugService debug;
 
     @Override
     public BookmarkStatus handles() {
@@ -25,16 +30,23 @@ public class SummarizationStep implements PipelineStep {
 
     @Override
     public void execute(Bookmark bookmark) {
-        String article = bookmark.getExtractedText();
-        if (article == null || article.isBlank()) {
+        String extracted = bookmark.getExtractedText();
+        if (extracted == null || extracted.isBlank()) {
             throw new SummarizationException("Bookmark has no extracted text to summarise");
         }
 
+        debug.article(bookmark, extracted);
+        EnrichedArticle enriched = figures.enrich(bookmark);
+        String article = enriched.text();
+        debug.enriched(bookmark, article);
+        bookmark.useSummaryInputHash(enriched.contentHash());
         Optional<Bookmark> reusable = findReusable(bookmark)
                 .filter(existing -> withinCeiling(existing, bookmark, article));
         if (reusable.isPresent()) {
             log.info("Reusing summary from bookmark {} for identical content", reusable.get().getId());
-            bookmark.applySummary(reusable.get().getSummaryText(), reusable.get().getLensBrief());
+            Bookmark existing = reusable.get();
+            debug.summary(bookmark, existing.getSummaryText(), existing.getId());
+            bookmark.applySummary(existing.getSummaryText(), existing.getLensBrief());
             return;
         }
 
@@ -42,6 +54,7 @@ public class SummarizationStep implements PipelineStep {
         ListenerNotes notes = brief == null ? ListenerNotes.NONE : briefs.notesFor(brief);
         String summary = summarizationService.summarise(bookmark.getTitle(), bookmark.getSourceDomain(), article,
                 bookmark.getSummaryLength(), notes);
+        debug.summary(bookmark, summary, null);
         bookmark.applySummary(summary, brief == null ? null : ListenerBriefService.toJson(brief));
     }
 
