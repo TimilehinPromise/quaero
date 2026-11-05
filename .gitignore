@@ -32,6 +32,8 @@ target/
 ### Internal docs and decision log — local only
 docs/*
 !docs/devlog/
+!docs/ReadCast_PRD.md
+!docs/ARCHITECTURE_PIPELINE.md
 
 ### Tests — local only, never committed
 src/test/

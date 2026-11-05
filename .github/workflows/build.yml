@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE: ghcr.io/timilehinpromise/know-commute
+  IMAGE: ghcr.io/timilehinpromise/quaero
 
 jobs:
   build:
