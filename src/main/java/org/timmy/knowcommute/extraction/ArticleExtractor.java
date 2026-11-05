@@ -92,7 +92,7 @@ public class ArticleExtractor implements DocumentExtractor {
         }
 
         return new ExtractedArticle(articleTitle, author(document), sourceDomain(page.finalUrl()),
-                figures.text(), figures.wordCount(), sha256(figures.text()), figures.figures());
+                figures.text(), figures.wordCount(), sha256(figures.text()), figures.figures(), figures.decisions());
     }
 
     /**

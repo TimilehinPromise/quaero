@@ -84,27 +84,31 @@ final class FigureMarkup {
             String rejection = linkedTarget != null
                     ? null
                     : rejectionReason(image, imageUrl, linked, properties.minDimension());
-            double score = properties.enabled() && rejection == null
+            ExtractedFigureDecision.Score score = properties.enabled() && rejection == null
                     ? score(!"img".equals(item.tagName()), caption, alt, before, after, imageUrl,
                             articleTitle, imagesSeen)
-                    : 0;
+                    : ExtractedFigureDecision.Score.zero();
             seen.put(item, new Seen(imagesSeen, imageUrl, alt, caption, before, after, markup, rejection, score));
         }
 
         Map<Element, Integer> ordinals = selectOrdinals(seen, properties);
         List<ExtractedFigure> figures = new ArrayList<>();
+        List<ExtractedFigureDecision> decisions = new ArrayList<>();
         for (Element item : items) {
             Seen details = seen.get(item);
             if (details == null) {
                 continue;
             }
             Integer ordinal = ordinals.get(item);
+            decisions.add(decision(details.position(), ordinal, details.imageUrl(), details.alt(), details.caption(),
+                    details.before(), details.after(), details.rejection(), details.score(), properties.enabled()));
             String replacement;
             if (ordinal != null) {
                 figures.add(new ExtractedFigure(ordinal, details.imageUrl(), details.alt(), details.caption(),
                         details.before(), details.after()));
                 replacement = "[Figure " + ordinal + "]";
-                log.info("Figure selected: ordinal={} url={} score={}", ordinal, details.imageUrl(), details.score());
+                log.info("Figure selected: ordinal={} url={} score={}", ordinal, details.imageUrl(),
+                        details.score().total());
             } else {
                 replacement = details.markup() == null ? "" : "[Figure: " + details.markup() + "]";
                 if (properties.enabled()) {
@@ -116,7 +120,7 @@ final class FigureMarkup {
         long candidates = seen.values().stream().filter(details -> details.rejection() == null).count();
         log.info("Figure markup extraction: route=html visionEnabled={} imagesSeen={} candidates={} selected={}",
                 properties.enabled(), imagesSeen, candidates, figures.size());
-        return new Result(normalise(content.text()), wordCount, figures);
+        return new Result(normalise(content.text()), wordCount, figures, decisions);
     }
 
     static Result markdown(String markdown, URI baseUri, String articleTitle, FigureProperties properties) {
@@ -133,10 +137,10 @@ final class FigureMarkup {
             String before = markdownParagraph(markdown, matcher.start(), true);
             String after = markdownParagraph(markdown, matcher.end(), false);
             String rejection = rejectionReason(imageUrl, linked);
-            double score = properties.enabled() && rejection == null
+            ExtractedFigureDecision.Score score = properties.enabled() && rejection == null
                     ? score(false, null, alt, before, after, imageUrl, articleTitle, imagesSeen)
-                    : 0;
-            matches.add(new SeenMatch(matcher.start(), matcher.end(), imageUrl, alt, before, after,
+                    : ExtractedFigureDecision.Score.zero();
+            matches.add(new SeenMatch(imagesSeen, matcher.start(), matcher.end(), imageUrl, alt, before, after,
                     markup, rejection, score));
         }
 
@@ -144,18 +148,22 @@ final class FigureMarkup {
         StringBuilder marked = new StringBuilder();
         StringBuilder prose = new StringBuilder();
         List<ExtractedFigure> figures = new ArrayList<>();
+        List<ExtractedFigureDecision> decisions = new ArrayList<>();
         int cursor = 0;
         for (int index = 0; index < matches.size(); index++) {
             SeenMatch details = matches.get(index);
             marked.append(markdown, cursor, details.start());
             prose.append(markdown, cursor, details.start());
             Integer ordinal = ordinals.get(index);
+            decisions.add(decision(details.position(), ordinal, details.imageUrl(), details.alt(), null,
+                    details.before(), details.after(), details.rejection(), details.score(), properties.enabled()));
             String replacement;
             if (ordinal != null) {
                 figures.add(new ExtractedFigure(ordinal, details.imageUrl(), details.alt(), null,
                         details.before(), details.after()));
                 replacement = "[Figure " + ordinal + "]";
-                log.info("Figure selected: ordinal={} url={} score={}", ordinal, details.imageUrl(), details.score());
+                log.info("Figure selected: ordinal={} url={} score={}", ordinal, details.imageUrl(),
+                        details.score().total());
             } else {
                 replacement = details.markup() == null ? "" : "[Figure: " + details.markup() + "]";
                 if (properties.enabled()) {
@@ -171,7 +179,7 @@ final class FigureMarkup {
         long candidates = matches.stream().filter(details -> details.rejection() == null).count();
         log.info("Figure markup extraction: route=markdown visionEnabled={} imagesSeen={} candidates={} selected={}",
                 properties.enabled(), imagesSeen, candidates, figures.size());
-        return new Result(normalise(marked.toString()), countWords(normalise(prose.toString())), figures);
+        return new Result(normalise(marked.toString()), countWords(normalise(prose.toString())), figures, decisions);
     }
 
     /**
@@ -185,7 +193,8 @@ final class FigureMarkup {
         }
         List<Map.Entry<Element, Seen>> ranked = seen.entrySet().stream()
                 .filter(entry -> entry.getValue().rejection() == null)
-                .sorted((left, right) -> Double.compare(right.getValue().score(), left.getValue().score()))
+                .sorted((left, right) -> Double.compare(
+                        right.getValue().score().total(), left.getValue().score().total()))
                 .limit(properties.maxPerArticle())
                 .toList();
         List<Map.Entry<Element, Seen>> documentOrder = ranked.stream()
@@ -205,7 +214,8 @@ final class FigureMarkup {
         List<Integer> ranked = IntStream.range(0, matches.size())
                 .filter(index -> matches.get(index).rejection() == null)
                 .boxed()
-                .sorted((left, right) -> Double.compare(matches.get(right).score(), matches.get(left).score()))
+                .sorted((left, right) -> Double.compare(
+                        matches.get(right).score().total(), matches.get(left).score().total()))
                 .limit(properties.maxPerArticle())
                 .sorted()
                 .toList();
@@ -222,25 +232,28 @@ final class FigureMarkup {
      * heroes carry rich alt too), so alt is a small tiebreak. Document position is the final
      * tiebreak, which makes the sort fully deterministic and keeps FIFO behaviour on equal images.
      */
-    private static double score(boolean wrappedInFigure, String caption, String alt, String before,
-            String after, String imageUrl, String articleTitle, int position) {
-        double score = -0.01 * position;
-        if (meaningful(caption, articleTitle, imageUrl) != null) {
-            score += CAPTION_SCORE;
-        }
-        if (figureReference(before) || figureReference(after)) {
-            score += FIGURE_REFERENCE_SCORE;
-        }
-        if (wrappedInFigure) {
-            score += FIGURE_WRAPPER_SCORE;
-        }
-        if (meaningful(alt, articleTitle, imageUrl) != null) {
-            score += ALT_SCORE;
-        }
-        if (imageUrl != null && JUNK_URL.matcher(imageUrl.toLowerCase(Locale.ROOT)).find()) {
-            score += JUNK_URL_SCORE;
-        }
-        return score;
+    private static ExtractedFigureDecision.Score score(boolean wrappedInFigure, String caption, String alt,
+            String before, String after, String imageUrl, String articleTitle, int position) {
+        double captionScore = meaningful(caption, articleTitle, imageUrl) != null ? CAPTION_SCORE : 0;
+        double referenceScore = figureReference(before) || figureReference(after) ? FIGURE_REFERENCE_SCORE : 0;
+        double wrapperScore = wrappedInFigure ? FIGURE_WRAPPER_SCORE : 0;
+        double altScore = meaningful(alt, articleTitle, imageUrl) != null ? ALT_SCORE : 0;
+        double junkScore = imageUrl != null && JUNK_URL.matcher(imageUrl.toLowerCase(Locale.ROOT)).find()
+                ? JUNK_URL_SCORE : 0;
+        double positionScore = -0.01 * position;
+        double total = captionScore + referenceScore + wrapperScore + altScore + junkScore + positionScore;
+        return new ExtractedFigureDecision.Score(total, captionScore, referenceScore, wrapperScore,
+                junkScore, altScore, positionScore);
+    }
+
+    private static ExtractedFigureDecision decision(int position, Integer ordinal, String imageUrl, String alt,
+            String caption, String before, String after, String rejection, ExtractedFigureDecision.Score score,
+            boolean visionEnabled) {
+        String decision = ordinal != null ? "selected" : visionEnabled ? "rejected" : "preserved";
+        String reason = ordinal != null ? "selected"
+                : !visionEnabled ? "vision-disabled" : rejection == null ? "ranked-below-cut" : rejection;
+        return new ExtractedFigureDecision(position, ordinal, imageUrl, alt, caption, before, after,
+                decision, reason, score);
     }
 
     private static boolean figureReference(String paragraph) {
@@ -249,13 +262,13 @@ final class FigureMarkup {
 
     private static String skipReason(Seen details) {
         return details.rejection() == null
-                ? "ranked-below-cut score=" + details.score()
+                ? "ranked-below-cut score=" + details.score().total()
                 : details.rejection();
     }
 
     private static String skipReason(SeenMatch details) {
         return details.rejection() == null
-                ? "ranked-below-cut score=" + details.score()
+                ? "ranked-below-cut score=" + details.score().total()
                 : details.rejection();
     }
 
@@ -515,16 +528,18 @@ final class FigureMarkup {
     }
 
     private record Seen(int position, String imageUrl, String alt, String caption, String before,
-            String after, String markup, String rejection, double score) {
+            String after, String markup, String rejection, ExtractedFigureDecision.Score score) {
     }
 
-    private record SeenMatch(int start, int end, String imageUrl, String alt, String before,
-            String after, String markup, String rejection, double score) {
+    private record SeenMatch(int position, int start, int end, String imageUrl, String alt, String before,
+            String after, String markup, String rejection, ExtractedFigureDecision.Score score) {
     }
 
-    record Result(String text, int wordCount, List<ExtractedFigure> figures) {
+    record Result(String text, int wordCount, List<ExtractedFigure> figures,
+            List<ExtractedFigureDecision> decisions) {
         Result {
             figures = List.copyOf(figures);
+            decisions = List.copyOf(decisions);
         }
     }
 }

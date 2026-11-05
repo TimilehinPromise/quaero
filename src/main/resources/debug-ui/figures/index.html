@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Figure Workbench · ReadCast</title>
+    <link rel="stylesheet" href="/debug/figures/styles.css">
+    <script src="/debug/figures/app.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar" aria-label="Debug runs">
+        <header class="brand">
+            <div class="brand-mark" aria-hidden="true">R</div>
+            <div>
+                <div class="brand-name">ReadCast</div>
+                <div class="brand-product">Figure Workbench</div>
+            </div>
+            <span class="builder-badge">Builder</span>
+        </header>
+
+        <div class="sidebar-tools">
+            <label class="search-field">
+                <span class="sr-only">Search debug runs</span>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"></circle><path d="m13 13 4 4"></path></svg>
+                <input id="run-search" type="search" placeholder="Search title or URL" autocomplete="off">
+            </label>
+            <button id="refresh-runs" class="icon-button" type="button" title="Refresh runs" aria-label="Refresh runs">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 7a6.5 6.5 0 1 0 .2 5"></path><path d="M16 3v4h-4"></path></svg>
+            </button>
+        </div>
+
+        <div class="filter-row" role="group" aria-label="Filter runs">
+            <button class="filter-button active" type="button" data-filter="all">All</button>
+            <button class="filter-button" type="button" data-filter="issues">Issues</button>
+            <button class="filter-button" type="button" data-filter="none">NONE</button>
+            <button class="filter-button" type="button" data-filter="cached">Cached</button>
+        </div>
+
+        <div id="run-list" class="run-list" aria-live="polite">
+            <div class="sidebar-message">Loading debug runs…</div>
+        </div>
+        <footer id="run-count" class="sidebar-footer">Filesystem-backed evaluation</footer>
+    </aside>
+
+    <main class="main-content">
+        <section id="empty-state" class="empty-state">
+            <div class="empty-symbol" aria-hidden="true">
+                <svg viewBox="0 0 32 32"><rect x="4" y="5" width="24" height="18" rx="3"></rect><path d="m8 19 6-6 5 5 3-3 4 4M10 27h12"></path><circle cx="21" cy="11" r="2"></circle></svg>
+            </div>
+            <p class="eyebrow">Figure evaluation</p>
+            <h1>Select a debug run</h1>
+            <p>Inspect selection decisions, compare images with recovered knowledge, and see exactly where each explanation entered the article.</p>
+        </section>
+
+        <section id="run-detail" class="run-detail" hidden>
+            <header class="run-header">
+                <div class="run-title-row">
+                    <div class="run-title-copy">
+                        <p class="eyebrow">Article evaluation</p>
+                        <h1 id="run-title"></h1>
+                        <div class="run-subtitle">
+                            <span id="run-id"></span>
+                            <span aria-hidden="true">·</span>
+                            <span id="run-updated"></span>
+                        </div>
+                    </div>
+                    <a id="source-link" class="source-link" target="_blank" rel="noopener noreferrer">
+                        Open source
+                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11 4h5v5M16 4l-7 7"></path><path d="M14 11v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h4"></path></svg>
+                    </a>
+                </div>
+                <div id="run-stats" class="stats-row"></div>
+            </header>
+
+            <nav id="view-tabs" class="view-tabs" aria-label="Evaluation views">
+                <button type="button" class="view-tab active" data-tab="figures">Figures <span id="figures-tab-count"></span></button>
+                <button type="button" class="view-tab" data-tab="insertions">Insertions <span id="insertions-tab-count"></span></button>
+                <button type="button" class="view-tab" data-tab="decisions">Decisions <span id="decisions-tab-count"></span></button>
+                <button type="button" class="view-tab" data-tab="documents">Documents</button>
+            </nav>
+
+            <div id="tab-content" class="tab-content" aria-live="polite"></div>
+        </section>
+    </main>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

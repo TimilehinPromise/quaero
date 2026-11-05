@@ -1,4 +1,14 @@
 package org.timmy.knowcommute.figure;
 
-public record EnrichedArticle(String text, String contentHash) {
+import java.util.List;
+
+public record EnrichedArticle(String text, String contentHash, List<FigureInsertion> insertions) {
+
+    public EnrichedArticle {
+        insertions = insertions == null ? List.of() : List.copyOf(insertions);
+    }
+
+    public EnrichedArticle(String text, String contentHash) {
+        this(text, contentHash, List.of());
+    }
 }

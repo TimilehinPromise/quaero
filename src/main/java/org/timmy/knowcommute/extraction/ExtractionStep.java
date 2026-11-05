@@ -14,6 +14,8 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.timmy.knowcommute.bookmark.Bookmark;
 import org.timmy.knowcommute.bookmark.BookmarkStatus;
+import org.timmy.knowcommute.figure.FigureDebugProperties;
+import org.timmy.knowcommute.figure.FigureDebugService;
 import org.timmy.knowcommute.figure.FigureProperties;
 import org.timmy.knowcommute.figure.FigureStore;
 import org.timmy.knowcommute.pipeline.PipelineStep;
@@ -28,6 +30,7 @@ public class ExtractionStep implements PipelineStep {
     private final ExtractionProperties extractionProperties;
     private final FigureProperties figureProperties;
     private final FigureStore figureStore;
+    private final FigureDebugService debug;
 
     /** Null when readcast.reader.enabled=false; EMPTY pages then degrade straight to the brief. */
     private final PageReader reader;
@@ -36,15 +39,24 @@ public class ExtractionStep implements PipelineStep {
     public ExtractionStep(ArticleFetcher fetcher, List<DocumentExtractor> extractors,
                           PageClassifier classifier, ExtractionProperties extractionProperties,
                           FigureProperties figureProperties, FigureStore figureStore,
-                          ReaderProperties readerProperties, ObjectProvider<PageReader> readers) {
+                          ReaderProperties readerProperties, ObjectProvider<PageReader> readers,
+                          FigureDebugService debug) {
         this(fetcher, extractors, classifier, extractionProperties, figureProperties, figureStore,
-                resolveReader(readerProperties, readers));
+                resolveReader(readerProperties, readers), debug);
     }
 
     /** Test constructor with the reader supplied directly; null disables the fallback. */
     ExtractionStep(ArticleFetcher fetcher, List<DocumentExtractor> extractors,
                    PageClassifier classifier, ExtractionProperties extractionProperties,
                    FigureProperties figureProperties, FigureStore figureStore, PageReader reader) {
+        this(fetcher, extractors, classifier, extractionProperties, figureProperties, figureStore, reader,
+                new FigureDebugService(new FigureDebugProperties("")));
+    }
+
+    ExtractionStep(ArticleFetcher fetcher, List<DocumentExtractor> extractors,
+                   PageClassifier classifier, ExtractionProperties extractionProperties,
+                   FigureProperties figureProperties, FigureStore figureStore, PageReader reader,
+                   FigureDebugService debug) {
         this.fetcher = fetcher;
         this.extractors = extractors;
         this.classifier = classifier;
@@ -52,6 +64,7 @@ public class ExtractionStep implements PipelineStep {
         this.figureProperties = figureProperties;
         this.figureStore = figureStore;
         this.reader = reader;
+        this.debug = debug;
     }
 
     private static PageReader resolveReader(ReaderProperties properties, ObjectProvider<PageReader> readers) {
@@ -81,6 +94,7 @@ public class ExtractionStep implements PipelineStep {
                 : extractor.extract(page);
         bookmark.applyExtraction(article.title(), article.author(), article.sourceDomain(), article.text(),
                 article.wordCount(), article.contentHash());
+        debug.extraction(bookmark, article);
         figureStore.replace(bookmark, article.figures());
     }
 
@@ -158,7 +172,7 @@ public class ExtractionStep implements PipelineStep {
             return null;
         }
         return new ExtractedArticle(title, null, sourceDomain(page.finalUrl()),
-                figures.text(), figures.wordCount(), sha256(figures.text()), figures.figures());
+                figures.text(), figures.wordCount(), sha256(figures.text()), figures.figures(), figures.decisions());
     }
 
     /**

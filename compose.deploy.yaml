@@ -32,6 +32,12 @@ services:
       READER_ENABLED: ${READER_ENABLED:-false}
       JINA_API_KEY: ${JINA_API_KEY}
 
+      # Builder-only figure traces. Set the directory to /data/figure-debug on the dev deployment
+      # and enable the viewer there; a token turns on browser Basic authentication.
+      READCAST_FIGURE_DEBUG_DIR: ${READCAST_FIGURE_DEBUG_DIR:-}
+      READCAST_FIGURE_DEBUG_VIEWER_ENABLED: ${READCAST_FIGURE_DEBUG_VIEWER_ENABLED:-false}
+      READCAST_FIGURE_DEBUG_VIEWER_TOKEN: ${READCAST_FIGURE_DEBUG_VIEWER_TOKEN:-}
+
       R2_ENDPOINT: ${R2_ENDPOINT}
       R2_ACCESS_KEY: ${R2_ACCESS_KEY}
       R2_SECRET_KEY: ${R2_SECRET_KEY}
@@ -43,12 +49,17 @@ services:
       timeout: 5s
       retries: 5
       start_period: 90s
+    volumes:
+      - readcast-figure-debug:/data/figure-debug
     # A stable name for the Nginx upstream. Coolify suffixes container names with the resource
     # UUID, so the generated name changes and cannot be written into a proxy config.
     networks:
       coolify:
         aliases:
           - zeteo
+
+volumes:
+  readcast-figure-debug:
 
 networks:
   coolify:
