@@ -1,6 +1,7 @@
-# know-commute
+# QUAERO
 
-Backend for **ReadCast** — paste a URL, get a podcast-style audio summary.
+Backend for **QUAERO** — paste a URL, get a podcast-style audio summary.
+Live at https://quaero.timmybotlabs.fyi/.
 Spring Boot 4.1.1, Java 21, PostgreSQL 17, Liquibase.
 
 **This repository is backend only.** No React, no PWA, no service worker. The frontend is a
