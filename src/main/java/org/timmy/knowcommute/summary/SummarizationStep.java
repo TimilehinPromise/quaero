@@ -38,7 +38,7 @@ public class SummarizationStep implements PipelineStep {
         debug.article(bookmark, extracted);
         EnrichedArticle enriched = figures.enrich(bookmark);
         String article = enriched.text();
-        debug.enriched(bookmark, article);
+        debug.enriched(bookmark, enriched);
         bookmark.useSummaryInputHash(enriched.contentHash());
         Optional<Bookmark> reusable = findReusable(bookmark)
                 .filter(existing -> withinCeiling(existing, bookmark, article));

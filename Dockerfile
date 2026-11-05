@@ -16,7 +16,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd --system --create-home --uid 1001 readcast
+RUN useradd --system --create-home --uid 1001 readcast \
+    && mkdir -p /data/figure-debug \
+    && chown -R readcast:readcast /data
 USER readcast
 WORKDIR /app
 
