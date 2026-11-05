@@ -30,7 +30,8 @@ target/
 .vscode/
 
 ### Internal docs and decision log — local only
-docs/
+docs/*
+!docs/devlog/
 
 ### Tests — local only, never committed
 src/test/
